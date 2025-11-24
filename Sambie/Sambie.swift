@@ -12,15 +12,15 @@ import SwiftData
 struct Sambie: App {
     
     /// Determine if the mounts have been loaded.
-    var isInitialized: Bool = false
+    @State private var isInitialized: Bool = false
     
-    var mountMonitor: MountMonitor?
+    @State private var mountMonitor: MountMonitor?
     
     /// The model container used to share the context between views.
     var sharedModelContainer: ModelContainer = {
         
         // Clear any problematic stores if needed during development. Usually if we change the models attached:
-        // try? clearPreviousStore()
+//         try? clearPreviousStore()
         
         // Define schemas:
         let schema = Schema([
@@ -34,7 +34,7 @@ struct Sambie: App {
         
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            container.mainContext.autosaveEnabled = false
+//            container.mainContext.autosaveEnabled = false
             return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
@@ -54,9 +54,9 @@ struct Sambie: App {
                             .background(Color(.windowBackgroundColor).opacity(0.8))
                             .task {
                                 // Monitor the mounts:
-//                                self.mountMonitor = await MountMonitor(container: sharedModelContainer)
-//                                await self.mount_monitor?.startMonitoring()
-//                                self.isInitialized = true
+                                self.mountMonitor = await MountMonitor(modelContainer: sharedModelContainer)
+                                await self.mountMonitor?.startMonitoring()
+                                self.isInitialized = true
                             }
                     }
                 }
@@ -78,12 +78,18 @@ struct Sambie: App {
     
     /// Function to clear previous store during development.
     private static func clearPreviousStore() throws {
-        let url = URL.applicationSupportDirectory.appending(path: Config.dbPath)
-        let fileManager = FileManager.default
+        let schema = Schema([Mount.self])
+        let modelConfiguration = ModelConfiguration(schema: schema)
         
-        if fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
-            logger("Removed previous model store.", level: .debug)
+        do {
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let context = container.mainContext
+            
+            try context.delete(model: Mount.self)
+            try context.save()
+        } catch {
+            print("Failed to clear mounts: \(error)")
+            throw error
         }
     }
 }

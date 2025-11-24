@@ -1,6 +1,6 @@
 //
 //  EditorErrorPopup.swift
-//  Shell Mounts
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 5/26/25.
 //
@@ -10,8 +10,8 @@ import SwiftUI
 struct EditorErrorPopup: View {
     
     // MARK: Properties
-    @Binding var validation_errors: [Error]
-    let background_color = Config.UI.Colors.error
+    @Binding var validationErrors: [Error]
+    let backgroundColor = Config.UI.Colors.error
     
 
     // MARK: Body
@@ -19,25 +19,27 @@ struct EditorErrorPopup: View {
         Popup(
             content: self.makeContent,
             onDismiss: self.onDismiss,
-            background: self.background_color
+            background: self.backgroundColor
         )
     }
     
     var makeContent: some View {
         VStack(alignment: .leading) {
-            Text("The following errors were found:")
-                .font(.caption)
+            // Only show header if multiple errors:
+            if self.validationErrors.count > 1 {
+                Text("The following errors were found:")
+                    .font(.caption)
+            }
             
-            ForEach(Array(self.validation_errors.enumerated()), id:\.offset) { index, error in
+            ForEach(Array(self.validationErrors.enumerated()), id:\.offset) { index, error in
                 Text(error.localizedDescription)
                     .font(.caption2)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
-                
             }
         }
     }
     
     /// Closing the popup will clear the validation errors.
-    private func onDismiss() { self.validation_errors = [] }
+    private func onDismiss() { self.validationErrors = [] }
 }

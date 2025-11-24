@@ -9,15 +9,16 @@ import SwiftUI
 
 struct MenuBarStatusIcon: View {
     // MARK: - Properties
-    let state: MountState
+    let status: ConnectionStatus
+    let errors: [String]
     
     
     // MARK: - View
     var body: some View {
-        if self.state.error != nil {
+        if !self.errors.isEmpty {
             MenuErrorIcon()
         } else {
-            switch self.state.status {
+            switch self.status {
             case .connecting:
                 MenuConnectingIcon()
             case .connected:

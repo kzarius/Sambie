@@ -14,7 +14,7 @@ struct EditorFormBlock<Content: View>: View {
     let icon: String
     let content: () -> Content
     let alignment: HorizontalAlignment = .leading
-    let font_size: Font = .title2
+    let fontSize: Font = .title2
 
     
     // MARK: - View
@@ -26,14 +26,14 @@ struct EditorFormBlock<Content: View>: View {
             // Block title:
             HStack {
                 Image(systemName: self.icon)
-                    .font(self.font_size)
+                    .font(self.fontSize)
                 Text(self.label)
-                    .font(self.font_size)
+                    .font(self.fontSize)
                     .padding(.bottom, 4)
             }
             
             // Content of the block:
-            content()
+            self.content()
         }
     }
 }

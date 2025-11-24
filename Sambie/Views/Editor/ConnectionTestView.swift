@@ -1,38 +1,31 @@
 //
 //  ConnectionTest.swift
-//  Shell Mounts
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 6/30/25.
 //
 
 import SwiftUI
+import SwiftData
 
 /// Takes the results of a connection test and formats them for display.
 struct ConnectionTestView: View {
     
     // MARK: - Properties
+    @Environment(\.modelContext) private var modelContext
+    @Environment(MountFormState.self) private var mountFormState
     // Bound properties:
-    @State private var results: String? = ""
-    @State private var is_loading: Bool = true
-    @State private var view_id: UUID = UUID()
+    @State private var results: String? = nil
+    @State private var isLoading: Bool = true
+    @State private var viewID: UUID = UUID()
     
-    let mount: MountData
     let trigger: Bool
+    private let connectionSuccessCaption: String = "The host was reached successfully at port \(Config.Ports.samba)"
     
-    private var header_text: String {
-        self.is_loading ? "Testing connection..." :
+    private var headerText: String {
+        self.isLoading ? "Testing connection..." :
             (self.results!.isEmpty ? "Connection successful." :
                 "Connection failed:")
-    }
-    
-    
-    // MARK: - Initializer
-    init(
-        mount: MountData,
-        trigger: Bool = false
-    ) {
-        self.mount = mount
-        self.trigger = trigger
     }
     
     
@@ -41,7 +34,7 @@ struct ConnectionTestView: View {
         VStack(alignment: .leading) {
             HStack {
                 // Icon:
-                if self.is_loading { ArrowLoadingIcon() }
+                if self.isLoading { ArrowLoadingIcon() }
                 else if self.results!.isEmpty {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Config.UI.Colors.success)
@@ -51,25 +44,34 @@ struct ConnectionTestView: View {
                 }
                 
                 // Status message:
-                Text(self.header_text)
+                Text(self.headerText)
             }
             
             if let results = self.results {
                 // If there is an error, show it:
                 if !results.isEmpty {
                     Text(results)
+                        .font(.caption)
                         .foregroundStyle(Config.UI.Colors.error)
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(nil)
+                // Otherwise, show the success caption:
+                } else {
+                    Text(self.connectionSuccessCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(nil)
+                        
                 }
             }
         }
-        .task(id: self.view_id) { await self.runTest() }
-        .onChange(of: self.trigger) { _, new_value in
-            if new_value {
+        .task(id: self.viewID) { await self.runTest() }
+        .onChange(of: self.trigger) { _, newValue in
+            if newValue {
                 // Reset the view ID to trigger the task again:
-                self.view_id = UUID()
-                self.is_loading = true
+                self.viewID = UUID()
+                self.isLoading = true
                 self.results = nil
             }
         }
@@ -80,13 +82,18 @@ struct ConnectionTestView: View {
     private func runTest() async {
         do {
             // Test the mount's connection via ConnectMount():
-            try await MountClient(with: self.mount.makeSnapshot()).testConnection()
+            if let mount = self.mountFormState.editing {
+                try await MountReadiness.checkMount(
+                    host: mount.host,
+                    customMountPoint: mount.customMountPoint
+                )
+            }
+            
             // No errors will produce this:
             self.results = ""
         } catch {
-            // Errors will produce this:
             self.results = error.localizedDescription
         }
-        self.is_loading = false
+        self.isLoading = false
     }
 }

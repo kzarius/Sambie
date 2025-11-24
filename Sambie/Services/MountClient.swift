@@ -1,287 +1,245 @@
 //
 //  MountClient.swift
-//  Shell Mounts
+//  Sambie
+//
+//  Handles mounting and unmounting Samba shares. Manages the state of the mount during the process and checks if the mount is already present and mounted.
 //
 //  Created by Kaeo McKeague-Clark on 3/24/25.
 //
 
+import SwiftData
 import SwiftUI
 
-/// A wrapper for the mount state that can be sent across actors.
-struct MountStateWrapper: Sendable {
-    let status: MountStatus
-    let error: MountError?
-    
-    init (state: MountState) {
-        self.init(
-            status: state.status,
-            error: state.error
-        )
-    }
-    
-    init (status: MountStatus, error: MountError? = nil) {
-        self.status = status
-        self.error = error
-    }
-}
-
-/// A client that handles mounting and unmounting directories using SSHFS.
+/// Handles mounting and unmounting Samba shares. Manages the state of the mount during the process and checks if the mount is already present and mounted.
 actor MountClient: Sendable {
     
     // MARK: - Properties
-    
     // The mount's current info that we're connecting to.
-    private var snapshot: MountSnapshot
-    
+    private let mountID: PersistentIdentifier
+    private let modelContainer: ModelContainer
     
     
     // MARK: - Initializer
     
     /// Initialize the ConnectMount object.
-    init(with snapshot: MountSnapshot) async { self.snapshot = snapshot }
-    
+    init(
+        mountID: PersistentIdentifier,
+        modelContainer: ModelContainer
+    ) async {
+        self.mountID = mountID
+        self.modelContainer = modelContainer
+        guard ((await RetrieveMount.getMount(id: mountID, in: modelContainer)) != nil) else {
+            fatalError("Mount with ID \(mountID) not found in model container.")
+        }
+    }
     
     
     // MARK: - Public Methods
+    /// Attempt to mount a samba drive to a directory.
+    /// - Note: This function updates the mount's state as it progresses.
+    func mount() async {
+        await self.updateState(status: .connecting)
+        do {
+            try await self.doMount()
+            await self.updateState(status: .connected)
+        } catch {
+            let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
+            await self.updateState(status: status, errors: [error])
+        }
+    }
+    
+    func unmount() async {
+        await self.updateState(status: .disconnecting)
+        do {
+            try await self.doUnmount()
+            await self.updateState(status: .disconnected)
+        } catch {
+            let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
+            await self.updateState(status: status, errors: [error])
+        }
+    }
     
     /// Attempt to mount the directory.
     /// - Note: This function will check if the mount is already present, and if it is, it will return early.
     /// - Note: If the mount is stubborn, it will attempt to force unmount it.
     /// - Returns: A MountState indicating the status of the mount operation.
-    func doMount() async -> MountStateWrapper {
+    func doMount() async throws {
         // If the mount is already connected, return early:
-        if await self.isMounted() {
-            return self.successfulMount()
+        if await self.isMounted() { return }
+        
+        guard let mount = await RetrieveMount.getMount(id: mountID, in: modelContainer) else {
+            throw ClientError.invalidMount
         }
         
-        do {
-            // Check if everything is prepped to attempt a mount:
-            try await SSHFS.checkReady(self.snapshot)
-            
-            // Mount and throw errors if the mount fails:
-            try await SSHFS.mount(self.snapshot)
-            
-            return self.successfulMount()
-            
-        // If the error is a MountError, then we are probably catching it from SSHFSResults:
-        } catch let error as MountError {
-            
-            switch error {
-                    
-            // The mount failed because the source is already mounted:
-            case .already_mounted:
-                // Check if the mount present is the same as the one we're trying to mount:
-                if await self.isMounted() {
-                    return self.successfulMount()
-                }
-                
-                // If the mount is different, throw error:
-                return await self.failedMounting(
-                    because: MountError.mount_exists(
-                        path: self.snapshot.paths.target
-                    )
-                )
-                
-            // Unable to connect because of a network issue:
-            case .io_error:
-                return await self.failedMounting(because: MountError.io_error)
-                
-            // The mount failed for an unkown reason, but we have output:
-            case .unknown(let code, let output):
-                return await self.failedMounting(
-                    because: MountError.unknown(
-                        code: code,
-                        output: output
-                    )
-                )
-                
-            // If the mount failed for some other reason, throw an error:
-            default:
-                return await self.failedMounting(because: error)
-            }
-        } catch {
-            logger("Encountered an error while mounting.", level: .error, snapshot: self.snapshot)
-            return await self.failedMounting(because: .unknown())
-        }
+        // Check if everything is prepped to attempt a mount:
+        try await MountReadiness.checkMount(
+            host: mount.host,
+            customMountPoint: mount.customMountPoint
+        )
+        
+        // Mount the share:
+        let mountedAt = try await MountShare(
+            host: mount.host,
+            share: mount.share,
+            username: mount.user,
+            password: nil, // Always nil - let macOS handle it.
+            customMountPoint: mount.customMountPoint,
+        ).mount()
+        
+        await mount.setActualMountPoint(mountedAt)
     }
-    
     
     /// Attempt to unmount the directory.
-    func doUnmount() async -> MountStateWrapper {
+    func doUnmount() async throws {
+        // Retrieve the mount object. If it doesn't exist, throw an error:
+        guard let mount = await RetrieveMount.getMount(id: self.mountID, in: self.modelContainer) else {
+            throw ClientError.invalidMount
+        }
+        
         // 1.) If the mount is already disconnected, return early:
         if await !self.isMounted() {
-            return self.successfulUnmount()
+            // Clear actual mount point since it's not mounted:
+            await mount.clearActualMountPoint()
+            return
         }
         
-        // 2.) Gentle unmount:
+        // 2.) Determine the path to unmount:
+        let unmountPath: String
+        if let actualMount = mount.actualMountPoint {
+            unmountPath = actualMount.path
+        } else if let customMount = mount.customMountPoint {
+            unmountPath = customMount.path
+        } else {
+            // No path available - cannot unmount
+            throw ClientError.mountpointDoesNotExist
+        }
+        
+        // 3.) Gentle unmount:
         do {
-            // Try to unmount gently:
-            if try await diskutilUnmount(path: self.snapshot.paths.target) {
-                return self.successfulUnmount()
+            if try await systemUnmount(path: unmountPath) {
+                await mount.clearActualMountPoint()
+                return
             }
-        } catch MountError.unmount_failed {
-            // If the unmount failed, we need to force unmount it:
-            logger("Failed to gently unmount.", level: .debug, snapshot: self.snapshot)
+        } catch ClientError.unmountFailed {
+            await logger("Gentle unmount failed, trying force unmount", level: .debug)
         } catch {
-            // If the unmount failed for some other reason, throw the error:
-            logger("Failed unmounting gently.", level: .debug, snapshot: self.snapshot)
+            await logger("Gentle unmount error: \(error)", level: .error)
+            throw error
         }
         
-        
-        // 3.) Forceful unmount:
-        do {
-            // If the mount is stubborn, force unmount it:
-            var unmount_success = false
-            try await self.forceUnmount { success in
-                unmount_success = success
-            }
-            
-            if unmount_success {
-                return self.successfulUnmount()
-            }
-        } catch {
-            logger("Failed unmounting forcefully.", level: .debug, snapshot: self.snapshot)
-            
-            // If the error is a MountError, handle it accordingly:
-            if let mount_error = error as? MountError {
-                return await self.failedMounting(because: mount_error)
-            // Otherwise, it's an unknown error:
-            } else {
-                return await self.failedMounting(because: .unknown())
-            }
-        }
-        
-        return await self.failedMounting(because: .unmount_failed)
+        // 4.) Forceful unmount:
+        // If the mount is stubborn, force unmount it:
+        try await self.forceUnmount(path: unmountPath)
+        await mount.clearActualMountPoint()
     }
-    
     
     /// Checks to see if the mount is already present.
     /// - Returns: A boolean indicating if the mount is present.
     /// - Note: This function uses a combination of `df` and `grep` to check if the source is mounted.
     func isMounted() async -> Bool {
-        // `df` returns a list of mounted filesystems. We need to construct
-        // the name we'll be searching for in the first column (source):
-        let filesystem_column_name: String
-        do {
-            filesystem_column_name = try SSHFS.makeRemoteConnectionString(
-                self.snapshot,
-                is_sshfs: true
-            )
-        } catch {
-            filesystem_column_name = ""
+        await logger("Checking if mount is mounted...", level: .debug)
+        
+        // Retrieve the mount object. If it doesn't exist, return false:
+        guard let mount = await RetrieveMount.getMount(id: mountID, in: modelContainer) else {
+            await logger("The mount does not exist in the database.", level: .error)
+            return false
         }
         
-        // Format and run the commands:
-        let df = await Command.run(Config.Command.Paths.df, with: ["-P"])
-        let filtered_df = df.output
-            // Split the output into lines:
-            .split(separator: "\n")
-            // Remove the first line (header):
-            .dropFirst()
-            // Filter out empty lines:
-            .compactMap { line -> (String, String)? in
-                // Split the line into columns:
-                let columns = line.split(separator: " ", omittingEmptySubsequences: true)
-                
-                // Check if the line has at least 6 columns:
-                guard columns.count >= 6 else { return nil }
-                
-                // POSIX: 0=Filesystem, 5=Mountpoint
-                return (String(columns[0]), String(columns[5]))
-            }
-        // Check if the first column (source) matches the source and the last column (target) matches the target:
-        return filtered_df.contains { paths in
-            return paths.0 == filesystem_column_name && paths.1 == self.snapshot.paths.target
-        }
+        // Check in order of priority:
+        if await self.checkActualMountPoint(mount: mount) { return true }
+        if await self.checkCustomMountPoint(mount: mount) { return true }
+        if await self.checkDefaultDirectory(mount: mount) { return true }
+
+        await logger("Mount not found via mountpoints or in the default directory.", level: .debug)
+        return false
     }
     
-    
-    /// Checks if the mount is valid and a connection can be made successfully.
-    /// - Throws: A descriptive error if the mount cannot connect.
-    func testConnection() async throws {
-        // Validate the paths and SSH properties, throwing errors if they are invalid:
-        try await SSHFS.checkReady(self.snapshot)
-    }
-    
-    
-    /// Updates the mount snapshot with new data.
-    func updateSnapshot(_ new_snapshot: MountSnapshot) async { self.snapshot = new_snapshot }
-    
-    
-    // MARK: - State Management
-    // These methods are used to interface with MountClient and update the state of the mount in the UI.
-    @MainActor
-    func updateState(to new_state: MountStateWrapper, for mount: MountData) {
-        mount.state.status = new_state.status
-        mount.state.error = new_state.error
-    }
-    
-    @MainActor
-    func mount(_ mount: MountData) async {
-        self.updateState(to: MountStateWrapper(status: .connecting), for: mount)
-        await self.updateSnapshot(mount.makeSnapshot())
-        self.updateState(to: await self.doMount(), for: mount)
-    }
-    
-    @MainActor
-    func unmount(_ mount: MountData) async {
-        self.updateState(to: MountStateWrapper(status: .disconnecting), for: mount)
-        await self.updateSnapshot(mount.makeSnapshot())
-        self.updateState(to: await self.doUnmount(), for: mount)
-    }
-    
-    @MainActor
     /// Dismiss the error for the mount, setting it to nil and update the status based on whether the mount is still mounted.
-    func dismissError(for mount: MountData) async {
-        self.updateState(
-            to: MountStateWrapper(
-                status: await self.isMounted() ? .connected : .disconnected,
-                error: nil
-            ),
-            for: mount
+    func dismissError() async {
+        await self.updateState(
+            status: await self.isMounted() ? .connected : .disconnected
         )
     }
-    
-    
     
     
     // MARK: - Private Methods
-    
     /// If the mount is stubborn, force unmount it.
-    /// - Parameter completion: A closure that returns a boolean indicating if the unmount was successful
-    /// - Returns: A boolean indicating if the unmount was successful.
-    /// - Throws: A MountError if the unmount fails to exit.
-    private func forceUnmount(completion: @escaping (Bool) -> Void) async throws {
-        // Attempt to unmount the disk:
-        if try await diskutilUnmount(path: self.snapshot.paths.target, forcefully: true) {
-            completion(true)
-            return
-        }
-        
-        // TODO: Set up a timer to make sure force unmount is successful.
-        
-        // If we've reached this point, the timer failed somehow:
-        throw MountError.unmount_timed_out
-    }
-    
-    
-    // MARK: - Mount State Handling
-    /// If the mount failed, set the status to whether the mount is still mounted or not and report the error.
-    private func failedMounting(because error: MountError) async -> MountStateWrapper {
-        return MountStateWrapper(
-            // If the mount is still mounted, set the status to connected, otherwise set it to disconnected:
-            status: await self.isMounted() ? MountStatus.connected : MountStatus.disconnected,
-            error: error
+    /// - Parameter path: The path to unmount.
+    private func forceUnmount(path: String) async throws {
+        let unmountSuccess = try await systemUnmount(
+            path: path,
+            forcefully: true
         )
+        
+        guard unmountSuccess else { throw ClientError.unmountFailed }
+        
+        // Brief delay for filesystem:
+        try await Task.sleep(for: .milliseconds(500))
+        
+        // Verify unmount:
+        if await self.isMounted() {
+            throw ClientError.unmountTimedOut
+        }
     }
     
-    /// If the mount was successful, set the status to connected.
-    private func successfulMount() -> MountStateWrapper {
-        return MountStateWrapper(status: .connected)
+    /// Check the actual mount point for the mount.
+    private func checkActualMountPoint(mount: Mount) async -> Bool {
+        guard let actualMount = mount.actualMountPoint else { return false }
+
+        await logger("Checking actual mount point at path: \(actualMount.path)", level: .debug)
+
+        let mountExists = await checkForMount(path: actualMount.path)
+        let identityVerified = await mount.verifyIdentity(at: actualMount)
+
+        if mountExists && identityVerified {
+            await logger("Mount verified at actual mount point", level: .debug)
+            return true
+        }
+
+        await logger("Mount not found or identity mismatch; clearing it", level: .debug)
+        await mount.clearActualMountPoint()
+        return false
+    }
+
+    /// Check the custom mount point for the mount.
+    private func checkCustomMountPoint(mount: Mount) async -> Bool {
+        guard let customMount = mount.customMountPoint else { return false }
+
+        await logger("Checking custom mount point at path: \(customMount.path)", level: .debug)
+
+        let mountExists = await checkForMount(path: customMount.path)
+        let identityVerified = await mount.verifyIdentity(at: customMount)
+
+        if mountExists && identityVerified {
+            await logger("Mount verified at custom mount point", level: .debug)
+            await mount.setActualMountPoint(customMount)
+            return true
+        }
+
+        return false
+    }
+
+    /// Search the default mount directory for a match with our mount.
+    private func checkDefaultDirectory(mount: Mount) async -> Bool {
+        await logger("Searching default mount directory...", level: .debug)
+
+        if let foundMount = await mount.searchDefaultDirectory() {
+            await logger("Found mount at \(foundMount.path)", level: .debug)
+            await mount.setActualMountPoint(foundMount)
+            return true
+        }
+
+        return false
     }
     
-    /// If the mount was successfully unmounted, set the status to disconnected.
-    private func successfulUnmount() -> MountStateWrapper {
-        return MountStateWrapper(status: .disconnected)
+    /// Safely access the mount and update its state
+    private func updateState(status: ConnectionStatus, errors: [Error] = []) async {
+        await MainActor.run {
+            guard let mount = RetrieveMount.getMount(id: self.mountID, in: self.modelContainer) else {
+                logger("Mount with ID \(self.mountID) no longer exists", level: .error)
+                return
+            }
+            mount.updateState(status: status, errors: errors)
+        }
     }
 }

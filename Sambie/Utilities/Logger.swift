@@ -1,6 +1,6 @@
 //
 //  logger.swift
-//  Shell Mounts
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 5/14/25.
 //
@@ -26,8 +26,4 @@ func logger(_ message: String, level: LogLevel? = .info) {
     
     // Print the message to the console:
     print(formatted_message)
-}
-
-func logger(_ message: String, level: LogLevel? = .info, snapshot: MountSnapshot) {
-    logger("Mount [\(snapshot.name)] - \(message)", level: level)
 }

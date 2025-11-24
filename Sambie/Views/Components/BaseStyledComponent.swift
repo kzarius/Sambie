@@ -1,6 +1,6 @@
 //
 //  BaseStyledComponent.swift
-//  Shell Mounts
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 6/20/25.
 //

@@ -1,6 +1,6 @@
 //
-//  Modal.swift
-//  Shell Mounts
+//  ConfirmationModal.swift
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 9/11/25.
 //
@@ -11,30 +11,30 @@ struct ConfirmationModal<Content: View>: View {
     
     // MARK: - Properties
     // States:
-    @Binding var is_active: Bool
+    @Binding var isActive: Bool
     
     // Local:
     let content: () -> Content
     let padding = 30.0
-    let max_width = 400.0
-    let corner_radius = 12.0
+    let maxWidth = 400.0
+    let cornerRadius = 12.0
     
     
     // MARK: - View
     var body: some View {
-        if self.is_active {
+        if self.isActive {
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    self.is_active = false
+                    self.isActive = false
                 }
                 .overlay {
                     self.content()
                         .padding(self.padding)
                         .background(Color(NSColor.windowBackgroundColor))
-                        .cornerRadius(self.corner_radius)
+                        .cornerRadius(self.cornerRadius)
                         .shadow(radius: 20)
-                        .frame(maxWidth: self.max_width)
+                        .frame(maxWidth: self.maxWidth)
                 }
         }
     }

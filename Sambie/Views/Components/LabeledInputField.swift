@@ -31,7 +31,7 @@ struct LabeledInputField<Content: View>: View {
             Text(self.label).modifier(LabelTextStyle())
             
             // The input field itself:
-            field()
+            self.field()
                 .modifier(TextFieldStyle())
                 .modifier(RoundedBorderStyle())
         }

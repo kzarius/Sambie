@@ -11,18 +11,17 @@ import SwiftData
 struct MenuBarIcon: View {
     
     // MARK: - Properties
-    @Environment(\.modelContext) private var model_context
-    @Query private var mounts: [MountData]
+    @Query private var mounts: [Mount]
     
     // Colors:
-    private let checkmark_color = Config.UI.Colors.primary
-    private let not_connected_color = Config.UI.Colors.secondary
+    private let checkmarkColor = Config.UI.Colors.primary
+    private let notConnectedColor = Config.UI.Colors.secondary
     
     // Runs a query to see if there are any connected mounts:
-    private var has_connected_mounts: Bool {
+    private var hasConnectedMounts: Bool {
         return self.mounts.contains {
-            $0.state.status == MountStatus.connected ||
-            $0.state.status == MountStatus.disconnecting
+            $0.status == ConnectionStatus.connected ||
+            $0.status == ConnectionStatus.disconnecting
         }
     }
     
@@ -30,14 +29,14 @@ struct MenuBarIcon: View {
     // MARK: - View
     var body: some View {
         // Connected mounts icon:
-        if self.has_connected_mounts {
+        if self.hasConnectedMounts {
             Image(systemName: "externaldrive.fill.badge.checkmark")
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(self.checkmark_color, .primary)
+                .foregroundStyle(self.checkmarkColor, .primary)
         // Default icon:
         } else {
             Image(systemName: Config.UI.Icons.menuBar)
-                .foregroundColor(self.not_connected_color)
+                .foregroundColor(self.notConnectedColor)
         }
     }
 }

@@ -10,16 +10,16 @@ import SwiftUI
 struct ListErrorPopup: View {
     
     // MARK: Properties
-    let message: String
+    let errors: [String]
     let onDismiss: () -> Void
     
     
     // MARK: Initializer
     init(
-        message: String,
+        errors: [String],
         onDismiss: @escaping () -> Void
     ) {
-        self.message = message
+        self.errors = errors
         self.onDismiss = onDismiss
     }
 
@@ -27,9 +27,30 @@ struct ListErrorPopup: View {
     // MARK: Body
     var body: some View {
         Popup(
-            content: Text(message),
-            onDismiss: onDismiss,
+            content: Text(self.formatMessage()),
+            onDismiss: self.onDismiss,
             background: Config.UI.Colors.error
         )
+    }
+    
+    /// Formats the error messages for display.
+    private func formatMessage() -> String {
+        // Handle no errors:
+        if self.errors.isEmpty { return "An unknown error occurred." }
+        
+        // Single error case:
+        if (self.errors.count == 1) {
+            return "\(self.errors[0])"
+        }
+        
+        // Summarise if multiple errors:
+        var output = "\(self.errors.count) errors occurred:\n"
+        // List each error:
+        for error in self.errors {
+            output += "- \(error)\n"
+        }
+        
+        // Trim trailing newline and return:
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

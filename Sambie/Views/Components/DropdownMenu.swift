@@ -11,16 +11,16 @@ struct DropdownMenu<Content: View>: View {
     
     // MARK: - Properties
     let icon: String = "chevron.down.square.fill"
-    var selected_item: String
+    var selectedItem: String
     var list: () -> Content
 
     
     // MARK: - Initializer
     init(
-        selected_item: String,
+        selectedItem: String,
         @ViewBuilder list: @escaping () -> Content
     ) {
-        self.selected_item = selected_item
+        self.selectedItem = selectedItem
         self.list = list
     }
     
@@ -28,10 +28,10 @@ struct DropdownMenu<Content: View>: View {
     // MARK: - Views
     var body: some View {
         Menu {
-            list()
+            self.list()
         } label: {
             HStack {
-                Text(selected_item)
+                Text(self.selectedItem)
                 Image(systemName: self.icon)
                     .foregroundColor(Config.UI.Colors.text)
             }

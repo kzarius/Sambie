@@ -11,25 +11,24 @@ import SwiftData
 struct WindowView: View {
     
     // MARK: - Properties
-    @State private var editingMountID: PersistentIdentifier?
+    @State private var mountFormState = MountFormState()
     
     // MARK: - View
     var body: some View {
-        NavigationSplitView {
-            // Show the list of mounts:
-            ListView()
-                .frame(minWidth: 200)
-        } detail: {
-            // Show the editor view if we have a mount to edit:
-            if let mountID = self.editingMountID {
-                EditorView(mountID: self.$editingMountID)
+        
+        ListView()
+            .frame(minWidth: 200)
+            // Editor Sheet:
+            // When mountFormState.editing is not nil, present the EditorView sheet.
+            .sheet(isPresented: Binding(
+                get: { self.mountFormState.editing != nil },
+                set: {
+                    if !$0 { self.mountFormState.editing = nil }
+                }
+            )) {
+                EditorView()
+                    .environment(self.mountFormState)
             }
-        }
+            .environment(self.mountFormState)
     }
-}
-
-
-#Preview {
-    WindowView()
-        .modelContainer(for: Mount.self, inMemory: true)
 }

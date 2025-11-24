@@ -11,9 +11,18 @@ import SwiftUI
 enum Config {
     // MARK: - General Configuration
     static let debug = true
-    static let serviceName = "com.kaeomc.sambie"
-    static let dbPath = "sambie.sqlite"
-    static let keychainService = "com.sambie.mounts"
+    
+    // MARK: - Paths and Identifiers
+    enum Paths {
+        static let serviceName = "com.kaeomc.sambie"
+        static let dbPath = "sambie.sqlite"
+        static let keychainService = "com.sambie.mounts"
+        static let sambaMountBase = "/Volumes"
+    }
+    
+    enum Ports {
+        static let samba: Int = 445
+    }
     
     // MARK: - UI Configuration
     enum UI {
@@ -76,17 +85,5 @@ enum Config {
     enum Connection {
         // Interval for checking if a mount is still connected:
         static let checkMountInterval = 10.0
-    }
-    
-    // MARK: - Command Configuration
-    enum Command {
-        static let timeout: TimeInterval = 5.0
-        
-        enum Paths {
-            static let diskutil = URL(fileURLWithPath: "/usr/sbin/diskutil")
-            static let which = URL(fileURLWithPath: "/usr/bin/which")
-            static let grep = URL(fileURLWithPath: "/usr/bin/grep")
-            static let df = URL(fileURLWithPath: "/bin/df")
-        }
     }
 }

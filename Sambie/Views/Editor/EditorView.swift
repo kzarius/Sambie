@@ -1,6 +1,6 @@
 //
 //  EditorView.swift
-//  Shell Mounts
+//  Sambie
 //
 //  An editor view for creating and modifying mount configurations. This view is triggered when a user selects a mount from the list or opts to create a new one.
 //
@@ -13,39 +13,32 @@ import SwiftUI
 struct EditorView: View {
     
     // MARK: - Properties
-    // SwiftData properties:
-    @Environment(\.modelContext) private var modelContext
-    
+    // Environment:
+    @Environment(MountFormState.self) private var mountFormState
     // States and bindings:
-    @Binding var mountID: PersistentIdentifier?
-    @State private var mount: Mount?
     @State private var doConnectionTest: Bool = false
+    @State private var validationErrors: [Error] = []
+    @State private var sambaURL: String = ""
     
     
     // MARK: - View
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            EditorForm(
-                mount: self.$mount,
-                doConnectionTest: self.$doConnectionTest
-            )
+            if self.mountFormState.formData != nil {
+                EditorForm(
+                    doConnectionTest: self.$doConnectionTest,
+                    validationErrors: self.$validationErrors,
+                    sambaURL: self.$sambaURL
+                )
+            }
         }
         .toolbar {
-            // Action buttons:
-            EditorToolbar(
-                mount: self.$mount,
-                doConnectionTest: self.$doConnectionTest
-            )
-        }
-        // Load or create the mount on appear:
-        .onAppear {
-            // Load the selected mount if we have an ID:
-            if let mountID = self.mountID, self.mount == nil {
-                // Fetch the mount from the database:
-                self.mount = RetrieveMount.getMount(id: mountID, in: self.modelContext.container)
-            // Create a new mount if none is selected:
-            } else {
-                self.mount = Mount()
+            if self.mountFormState.editing != nil {
+                // Action buttons:
+                EditorToolbar(
+                    doConnectionTest: self.$doConnectionTest,
+                    validationErrors: self.$validationErrors
+                )
             }
         }
         // Handle connection testing:
@@ -55,6 +48,17 @@ struct EditorView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     self.doConnectionTest = false
                 }
+            }
+        }
+        // Initialize sambaURL when mount loads:
+        .onChange(of: self.mountFormState.formData) { _, newMount in
+            if let mount = newMount {
+                self.sambaURL = MountShare.buildURL(from: mount)
+            }
+        }
+        .onAppear {
+            if let mount = self.mountFormState.formData {
+                self.sambaURL = MountShare.buildURL(from: mount)
             }
         }
     }

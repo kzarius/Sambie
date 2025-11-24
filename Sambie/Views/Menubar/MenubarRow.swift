@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct MenuBarRow: View {
     
@@ -14,16 +15,17 @@ struct MenuBarRow: View {
     let mount: Mount
     
     // Declared:
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.modelContext) private var modelContext
     @State private var mountConnection: MountClient?
-    @Environment(\.openWindow) private var open_window
     
     
     // MARK: - View
     var body: some View {
         Button(action: {
             // Open the main window if there's an error:
-            if self.mount.state.error != nil {
-                open_window(id: "mounts-window")
+            if !self.mount.errors.isEmpty {
+                openWindow(id: "mounts-window")
                 return
             }
             
@@ -31,7 +33,10 @@ struct MenuBarRow: View {
             self.toggleMount()
         }) {
             HStack {
-                MenuBarStatusIcon(state: self.mount.state)
+                MenuBarStatusIcon(
+                    status: self.mount.status,
+                    errors: self.mount.errors
+                )
                     
                 Text(mount.name)
             }
@@ -39,19 +44,21 @@ struct MenuBarRow: View {
         // Disable until we have a connection to the mount:
         .disabled(self.mountConnection == nil)
         .task {
-            self.mountConnection = await MountClient(with: self.mount.makeSnapshot())
+            self.mountConnection = await MountClient(mountID: self.mount.persistentModelID, modelContainer: self.modelContext.container)
         }
     }
     
     private func toggleMount() {
         Task {
-            switch self.mount.state.status {
-            case .connected:
-                await self.mountConnection?.unmount(self.mount)
-            case .disconnected:
-                await self.mountConnection?.mount(self.mount)
-            default:
-                break
+            if let mountConnection {
+                switch self.mount.status {
+                case .connected:
+                    await mountConnection.unmount()
+                case .disconnected:
+                    await mountConnection.mount()
+                default:
+                    break
+                }
             }
         }
     }

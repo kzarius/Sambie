@@ -1,6 +1,6 @@
 //
-//  ErrorPopup.swift
-//  Shell Mounts
+//  Popup.swift
+//  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 5/26/25.
 //
@@ -20,7 +20,7 @@ struct Popup<Content: View>: View {
     var background: Color = Config.UI.Colors.secondary
     var foreground: Color = Config.UI.Colors.text
     let padding: CGFloat = 4
-    let corner_radius: CGFloat = 2
+    let cornerRadius: CGFloat = 2
     let font: Font = .caption
     
     
@@ -56,7 +56,7 @@ struct Popup<Content: View>: View {
         .font(self.font)
         .padding(self.padding)
         .background(self.background)
-        .cornerRadius(self.corner_radius)
+        .cornerRadius(self.cornerRadius)
         .zIndex(1)
     }
 }

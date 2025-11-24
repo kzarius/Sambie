@@ -10,14 +10,14 @@ import SwiftUI
 struct AddMountRow: View {
     
     // MARK: - Properties
-    private var newMount: Mount?
+    @Environment(MountFormState.self) private var mountFormState
     
     
     // MARK: - View
     var body: some View {
         // On click, change our state variables to change the mount details view:
         Button(action: {
-            self.newMount = Mount()
+            self.mountFormState.startEditing(Mount())
         }) {
             HStack {
                 Image(systemName: Config.UI.Icons.List.add)
