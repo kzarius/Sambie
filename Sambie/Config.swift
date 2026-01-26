@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// Application configuration and constants.
-enum Config {
+enum Config: Sendable {
     // MARK: - General Configuration
     static let debug = true
     
@@ -21,7 +21,7 @@ enum Config {
     }
     
     enum Ports {
-        static let samba: Int = 445
+        nonisolated static let samba: Int = 445
     }
     
     // MARK: - UI Configuration
@@ -84,6 +84,6 @@ enum Config {
     
     enum Connection {
         // Interval for checking if a mount is still connected:
-        static let checkMountInterval = 10.0
+        nonisolated static let checkMountInterval = 10.0
     }
 }

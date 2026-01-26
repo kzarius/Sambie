@@ -13,77 +13,71 @@ struct ListRow: View {
     // MARK: - Properties
     // Passed:
     let mount: Mount
-    
     // Declared:
-    @Environment(\.modelContext) private var modelContext
-    @Environment(MountFormState.self) private var mountFormState
+    @Environment(\.mountAccessor) private var accessor
+    @Environment(MountStateManager.self) private var stateManager
+
+    // Binding for the currently editing mount ID. If it's not nil, it will trigger the editing window.
+    @Binding var editingMountID: PersistentIdentifier?
     // Connection to the mount:
     @State private var mountConnection: MountClient?
-    // Background color based on connection state:
-    @State private var backgroundColor: Color? = nil
+    
+    // Helper to read the current transient state for this mount:
+    private var transientState: MountStateManager.MountState {
+        self.stateManager.getState(for: mount.persistentModelID)
+    }
 
     
     // MARK: - View
     var body: some View {
-        // If we have a connection to this mount, display it's row:
-        if self.mountConnection != nil {
-            ZStack {
-                HStack {
-                    // Content of the mount entry:
-                    ListRowContent(mount: mount) {
-                        await handleMountToggle()
-                    }
+        ZStack {
+            HStack {
+                // Content of the mount entry:
+                ListRowContent(mount: self.mount) {
+                    await self.handleMountToggle()
+                }
 
-                    // Open in Finder button:
-                    if self.mount.status == .connected {
-                        OpenInFinderButton(mountPoint: mount.actualMountPoint)
-                    }
+                // Open in Finder button:
+                if self.transientState.status == .connected {
+//                        OpenInFinderButton(mountPoint: self.mount.actualMountPoint)
+                }
 
-                    // Edit button:
-                    EditMountButton(mount: mount) {
-                        self.mountFormState.startEditing(mount)
-                    }
+                // Edit button:
+                EditMountButton {
+                    self.editMount()
                 }
             }
-            // Show errors if they occur:
-            .overlay(alignment: .center) {
-                if !self.mount.errors.isEmpty {
-                    ListErrorPopup(
-                        errors: self.mount.errors,
-                        onDismiss: {
-                            Task {
-                                // Remove errors when the popup is dismissed:
-                                if let mountConnection = self.mountConnection {
-                                    await mountConnection.dismissError()
-                                }
+        }
+        // Show errors if they occur:
+        .overlay(alignment: .center) {
+            if !self.transientState.errors.isEmpty {
+                ListErrorPopup(
+                    errors: self.transientState.errors,
+                    onDismiss: {
+                        Task {
+                            // Remove errors when the popup is dismissed:
+                            if let mountConnection = self.mountConnection {
+                                await mountConnection.dismissError()
                             }
                         }
-                    )
-                }
+                    }
+                )
             }
-            .padding()
-            .background(self.setBackgroundColor())
-            .font(.title2)
-            .cornerRadius(6)
-            .listRowSeparator(.hidden)
-            
-        // Otherwise, if we don't have a connection yet, show a loading state:
-        } else {
-            HStack {
-                Spacer()
-                ProgressView()
-                    .scaleEffect(0.7)
-                    .padding(.trailing, 10)
-            }
-            // Initialize the connection if it doesn't exist:
-            .task { await self.startConnection() }
+        }
+        .padding()
+        .background(self.setBackgroundColor())
+        .font(.title2)
+        .cornerRadius(6)
+        .listRowSeparator(.hidden)
+        .task {
+            await self.initialize()
         }
     }
 
     
     // MARK: - Methods
     private func handleMountToggle() async {
-        switch self.mount.status {
+        switch self.stateManager.getState(for: self.mount.persistentModelID).status {
         case .connected:
             await self.mountConnection?.unmount()
         case .disconnected:
@@ -95,7 +89,7 @@ struct ListRow: View {
     
     /// Sets the background color of the entry based on the connection state.
     private func setBackgroundColor() -> Color {
-        switch self.mount.status {
+        switch self.stateManager.getState(for: self.mount.persistentModelID).status {
         case .disconnecting:
             return Config.UI.Colors.List.connecting
         case .disconnected:
@@ -107,11 +101,22 @@ struct ListRow: View {
         }
     }
     
+    /// Triggers the editing view.
+    private func editMount() {
+        // Create the data object for the editor from the live model
+        self.editingMountID = self.mount.persistentModelID
+    }
+    
     /// Creates a MountClient instance with the current mount and makes it available.
-    private func startConnection() async {
+    private func initialize() async {
+        guard let accessor = self.accessor else {
+            fatalError("MountAccessor not found in environment.")
+        }
+        
         self.mountConnection = await MountClient(
             mountID: self.mount.persistentModelID,
-            modelContainer: self.modelContext.container
+            accessor: accessor,
+            stateManager: self.stateManager
         )
     }
 }

@@ -13,15 +13,13 @@ import SwiftUI
 struct EditorForm: View {
     
     // MARK: - Properties
-    // SwiftData properties:
-    @Environment(MountFormState.self) private var mountFormState
-    
     // Bound variables:
+    @Binding var formData: MountDataObject?
     @Binding var doConnectionTest: Bool
     @Binding var validationErrors: [Error]
     @Binding var sambaURL: String
-    @State private var showConnectionTest: Bool = false
     
+    @State private var showConnectionTest: Bool = false
     
     // Constants for layout:
     private let cornerRadius: CGFloat = Config.UI.Layout.borderCornerRadius
@@ -44,9 +42,12 @@ struct EditorForm: View {
                 self.standardBlocksView
                 
                 // Connection test results:
-                if self.showConnectionTest {
+                if self.showConnectionTest, let formData = self.formData {
                     VStack {
-                        ConnectionTestView(trigger: self.doConnectionTest)
+                        ConnectionTestView(
+                            host: formData.host,
+                            trigger: self.doConnectionTest
+                        )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -63,64 +64,37 @@ struct EditorForm: View {
     
     var standardBlocksView: some View {
         Group {
-            if let mount = self.mountFormState.formData {
-                // Profile name:
-                EditorFormBlock(
-                    label: "Display Name",
-                    icon: "person.fill"
-                ) {
-                    TextField("", text: Binding(
-                        get: { mount.name },
-                        set: { mount.name = $0 }
-                    ))
+            // Profile name:
+            EditorFormBlock(
+                label: "Display Name",
+                icon: "person.fill"
+            ) {
+                TextField("", text: Binding(
+                    get: { self.formData?.name ?? "" },
+                    set: { self.formData?.name = $0 }
+                ))
                     .modifier(LargeTextFieldStyle())
-                }
-                
-                // Samba URL field:
-                EditorFormBlock(
-                    label: "URL",
-                    icon: "link"
-                ) {
-                    SambaURLParserField(
-                        urlString: $sambaURL,
-                        validationErrors: $validationErrors,
-                        mount: mount
-                    )
-                }
-                
-                // Detailed Connection fields:
-                EditorFormBlock(
-                    label: "Detailed",
-                    icon: "apple.terminal.fill"
-                ) {
-                    DetailedForm()
-                }
             }
-        }
-    }
-    
-    /// Validates the Samba URL and updates the mount's properties after the user submits the URL field.
-    private func validateAndUpdateURL(for mount: Mount) {
-        do {
-            // Parse the URL and update the mount:
-            let (user, host, share) = try MountShare.parseURL(self.sambaURL)
-            mount.user = user ?? ""
-            mount.host = host
-            mount.share = share
             
-            // Clear any previous URL validation errors:
-            validationErrors.removeAll { error in
-                if let configError = error as? ConfigurationError,
-                   case .invalidURL = configError {
-                    return true
-                }
-                return false
+            // Samba URL field:
+            EditorFormBlock(
+                label: "URL",
+                icon: "link"
+            ) {
+                SambaURLParserField(
+                    urlString: self.$sambaURL,
+                    validationErrors: self.$validationErrors,
+                    formData: self.$formData
+                )
             }
-        } catch {
-            // Only add if not already present:
-            if !validationErrors.contains(where: {
-                ($0 as? ConfigurationError) != nil
-            }) { validationErrors.append(error) }
+            
+            // Detailed Connection fields:
+            EditorFormBlock(
+                label: "Detailed",
+                icon: "apple.terminal.fill"
+            ) {
+                CredentialsForm(formData: self.$formData)
+            }
         }
     }
 }

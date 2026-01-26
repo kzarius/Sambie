@@ -12,9 +12,8 @@ import SwiftData
 struct ConnectionTestView: View {
     
     // MARK: - Properties
-    @Environment(\.modelContext) private var modelContext
-    @Environment(MountFormState.self) private var mountFormState
     // Bound properties:
+    var host: String
     @State private var results: String? = nil
     @State private var isLoading: Bool = true
     @State private var viewID: UUID = UUID()
@@ -82,12 +81,7 @@ struct ConnectionTestView: View {
     private func runTest() async {
         do {
             // Test the mount's connection via ConnectMount():
-            if let mount = self.mountFormState.editing {
-                try await MountReadiness.checkMount(
-                    host: mount.host,
-                    customMountPoint: mount.customMountPoint
-                )
-            }
+            try await MountReadiness.checkMount(host: self.host)
             
             // No errors will produce this:
             self.results = ""

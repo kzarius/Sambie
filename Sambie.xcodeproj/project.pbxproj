@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D98183082EE2B69100E8BAC5 /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = D98183072EE2B69100E8BAC5 /* Subprocess */; };
+		D9E8E6E82ED838CF00426A41 /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D9E8E6E72ED838CF00426A41 /* KeychainAccess */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D9FA0BC82E98E05C0001802D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D9E8E6E82ED838CF00426A41 /* KeychainAccess in Frameworks */,
+				D98183082EE2B69100E8BAC5 /* Subprocess in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,8 @@
 			);
 			name = Sambie;
 			packageProductDependencies = (
+				D9E8E6E72ED838CF00426A41 /* KeychainAccess */,
+				D98183072EE2B69100E8BAC5 /* Subprocess */,
 			);
 			productName = Sambie;
 			productReference = D9FA0BB82E98E05B0001802D /* Sambie.app */;
@@ -195,6 +204,10 @@
 			);
 			mainGroup = D9FA0BAF2E98E05B0001802D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */,
+				D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D9FA0BB92E98E05B0001802D /* Products */;
 			projectDirPath = "";
@@ -407,7 +420,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sambie;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSNetworkVolumesUsageDescription = Test;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -421,7 +437,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -437,10 +453,23 @@
 				DEVELOPMENT_TEAM = 6LR46S9RTK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sambie;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSNetworkVolumesUsageDescription = Test;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -454,7 +483,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -582,6 +611,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-subprocess.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.2.1;
+			};
+		};
+		D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kishikawakatsumi/KeychainAccess";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D98183072EE2B69100E8BAC5 /* Subprocess */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */;
+			productName = Subprocess;
+		};
+		D9E8E6E72ED838CF00426A41 /* KeychainAccess */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */;
+			productName = KeychainAccess;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D9FA0BB02E98E05B0001802D /* Project object */;
 }

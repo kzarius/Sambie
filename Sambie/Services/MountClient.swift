@@ -16,7 +16,8 @@ actor MountClient: Sendable {
     // MARK: - Properties
     // The mount's current info that we're connecting to.
     private let mountID: PersistentIdentifier
-    private let modelContainer: ModelContainer
+    private let accessor: MountAccessor
+    private let stateManager: MountStateManager
     
     
     // MARK: - Initializer
@@ -24,12 +25,17 @@ actor MountClient: Sendable {
     /// Initialize the ConnectMount object.
     init(
         mountID: PersistentIdentifier,
-        modelContainer: ModelContainer
+        accessor: MountAccessor,
+        stateManager: MountStateManager
     ) async {
+        // Assign properties:
         self.mountID = mountID
-        self.modelContainer = modelContainer
-        guard ((await RetrieveMount.getMount(id: mountID, in: modelContainer)) != nil) else {
-            fatalError("Mount with ID \(mountID) not found in model container.")
+        self.accessor = accessor
+        self.stateManager = stateManager
+
+        // Ensure the mount exists:
+        if await accessor.exists(id: mountID) == false {
+            fatalError("Mount with ID \(mountID) does not exist in accessor. Something isn't right.")
         }
     }
     
@@ -67,59 +73,25 @@ actor MountClient: Sendable {
         // If the mount is already connected, return early:
         if await self.isMounted() { return }
         
-        guard let mount = await RetrieveMount.getMount(id: mountID, in: modelContainer) else {
-            throw ClientError.invalidMount
-        }
-        
-        // Check if everything is prepped to attempt a mount:
-        try await MountReadiness.checkMount(
-            host: mount.host,
-            customMountPoint: mount.customMountPoint
-        )
-        
         // Mount the share:
-        let mountedAt = try await MountShare(
-            host: mount.host,
-            share: mount.share,
-            username: mount.user,
-            password: nil, // Always nil - let macOS handle it.
-            customMountPoint: mount.customMountPoint,
-        ).mount()
-        
-        await mount.setActualMountPoint(mountedAt)
+        _ = try await SambaMount(
+            mountID: mountID,
+            accessor: accessor
+        )
+        await logger ("State of mount: \(self.isMounted() ? "mounted" : "not mounted")", level: .debug)
     }
     
     /// Attempt to unmount the directory.
     func doUnmount() async throws {
-        // Retrieve the mount object. If it doesn't exist, throw an error:
-        guard let mount = await RetrieveMount.getMount(id: self.mountID, in: self.modelContainer) else {
-            throw ClientError.invalidMount
-        }
-        
-        // 1.) If the mount is already disconnected, return early:
-        if await !self.isMounted() {
-            // Clear actual mount point since it's not mounted:
-            await mount.clearActualMountPoint()
+        // Ensure the mount is actually mounted and discover its path.
+        guard let mountPoint = await self.getMountPoint() else {
+            await logger("Attempted to unmount, but mount is not currently mounted.", level: .debug)
             return
         }
         
-        // 2.) Determine the path to unmount:
-        let unmountPath: String
-        if let actualMount = mount.actualMountPoint {
-            unmountPath = actualMount.path
-        } else if let customMount = mount.customMountPoint {
-            unmountPath = customMount.path
-        } else {
-            // No path available - cannot unmount
-            throw ClientError.mountpointDoesNotExist
-        }
-        
-        // 3.) Gentle unmount:
+        // Gentle unmount:
         do {
-            if try await systemUnmount(path: unmountPath) {
-                await mount.clearActualMountPoint()
-                return
-            }
+            if try await systemUnmount(path: mountPoint.mountPath) { return }
         } catch ClientError.unmountFailed {
             await logger("Gentle unmount failed, trying force unmount", level: .debug)
         } catch {
@@ -127,31 +99,14 @@ actor MountClient: Sendable {
             throw error
         }
         
-        // 4.) Forceful unmount:
-        // If the mount is stubborn, force unmount it:
-        try await self.forceUnmount(path: unmountPath)
-        await mount.clearActualMountPoint()
+        // Forcefully unmount:
+        try await self.forceUnmount(path: mountPoint.mountPath)
     }
     
     /// Checks to see if the mount is already present.
     /// - Returns: A boolean indicating if the mount is present.
-    /// - Note: This function uses a combination of `df` and `grep` to check if the source is mounted.
     func isMounted() async -> Bool {
-        await logger("Checking if mount is mounted...", level: .debug)
-        
-        // Retrieve the mount object. If it doesn't exist, return false:
-        guard let mount = await RetrieveMount.getMount(id: mountID, in: modelContainer) else {
-            await logger("The mount does not exist in the database.", level: .error)
-            return false
-        }
-        
-        // Check in order of priority:
-        if await self.checkActualMountPoint(mount: mount) { return true }
-        if await self.checkCustomMountPoint(mount: mount) { return true }
-        if await self.checkDefaultDirectory(mount: mount) { return true }
-
-        await logger("Mount not found via mountpoints or in the default directory.", level: .debug)
-        return false
+        return await self.getMountPoint() != nil
     }
     
     /// Dismiss the error for the mount, setting it to nil and update the status based on whether the mount is still mounted.
@@ -163,6 +118,18 @@ actor MountClient: Sendable {
     
     
     // MARK: - Private Methods
+    /// Retrieves the current mount point for the share.
+    /// - Returns: A `MountedVolume` if found, otherwise `nil`.
+    private func getMountPoint() async -> MountedVolume? {
+        do {
+            let mountData = try await self.accessor.getData(id: self.mountID)
+            return await MountPointService.getMountPoint(forHost: mountData.host, share: mountData.share)
+        } catch {
+            await logger("Failed to get mount data for ID \(self.mountID) to check mount point: \(error)", level: .error)
+            return nil
+        }
+    }
+    
     /// If the mount is stubborn, force unmount it.
     /// - Parameter path: The path to unmount.
     private func forceUnmount(path: String) async throws {
@@ -182,64 +149,23 @@ actor MountClient: Sendable {
         }
     }
     
-    /// Check the actual mount point for the mount.
-    private func checkActualMountPoint(mount: Mount) async -> Bool {
-        guard let actualMount = mount.actualMountPoint else { return false }
-
-        await logger("Checking actual mount point at path: \(actualMount.path)", level: .debug)
-
-        let mountExists = await checkForMount(path: actualMount.path)
-        let identityVerified = await mount.verifyIdentity(at: actualMount)
-
-        if mountExists && identityVerified {
-            await logger("Mount verified at actual mount point", level: .debug)
-            return true
-        }
-
-        await logger("Mount not found or identity mismatch; clearing it", level: .debug)
-        await mount.clearActualMountPoint()
-        return false
-    }
-
-    /// Check the custom mount point for the mount.
-    private func checkCustomMountPoint(mount: Mount) async -> Bool {
-        guard let customMount = mount.customMountPoint else { return false }
-
-        await logger("Checking custom mount point at path: \(customMount.path)", level: .debug)
-
-        let mountExists = await checkForMount(path: customMount.path)
-        let identityVerified = await mount.verifyIdentity(at: customMount)
-
-        if mountExists && identityVerified {
-            await logger("Mount verified at custom mount point", level: .debug)
-            await mount.setActualMountPoint(customMount)
-            return true
-        }
-
-        return false
-    }
-
-    /// Search the default mount directory for a match with our mount.
-    private func checkDefaultDirectory(mount: Mount) async -> Bool {
-        await logger("Searching default mount directory...", level: .debug)
-
-        if let foundMount = await mount.searchDefaultDirectory() {
-            await logger("Found mount at \(foundMount.path)", level: .debug)
-            await mount.setActualMountPoint(foundMount)
-            return true
-        }
-
-        return false
-    }
-    
-    /// Safely access the mount and update its state
+    /// Safely access the mount and update its state.
     private func updateState(status: ConnectionStatus, errors: [Error] = []) async {
-        await MainActor.run {
-            guard let mount = RetrieveMount.getMount(id: self.mountID, in: self.modelContainer) else {
-                logger("Mount with ID \(self.mountID) no longer exists", level: .error)
-                return
-            }
-            mount.updateState(status: status, errors: errors)
+        // Ensure the mount still exists before updating state:
+        guard await self.accessor.exists(id: self.mountID) else {
+            await logger("Mount with ID \(self.mountID) no longer exists, cannot update state.", level: .error)
+            return
+        }
+        
+        // Update transient state via manager:
+        await self.stateManager.setStatus(status, for: self.mountID)
+        if errors.isEmpty {
+            await self.stateManager.clearErrors(for: self.mountID)
+        } else {
+            await self.stateManager.setErrors(
+                errors.map { $0.localizedDescription },
+                for: self.mountID
+            )
         }
     }
 }

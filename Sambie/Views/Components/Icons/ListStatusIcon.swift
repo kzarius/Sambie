@@ -5,6 +5,7 @@
 //  Created by Kaeo McKeague-Clark on 5/23/25.
 //
 
+import SwiftData
 import SwiftUI
 
 /// This view displays the status icon for a mount in the list view.
@@ -12,7 +13,8 @@ import SwiftUI
 struct ListStatusIcon: View {
     
     // MARK: - Properties
-    let mount: Mount
+    let mountID: PersistentIdentifier
+    @Environment(MountStateManager.self) private var stateManager
     
     // Details for the icon placement and style:
     let details = (
@@ -27,6 +29,7 @@ struct ListStatusIcon: View {
     
     // MARK: - Initializers
     var body: some View {
+        let state = self.stateManager.getState(for: self.mountID)
         
         ZStack {
             
@@ -34,7 +37,7 @@ struct ListStatusIcon: View {
                 .foregroundStyle(Config.UI.Colors.secondary)
 
             // Check if we need to show a loading icon:
-            if self.mount.status == .connecting || self.mount.status == .disconnecting {
+            if state.status == .connecting || state.status == .disconnecting {
                 
                 Image(systemName: Config.UI.Icons.List.loading)
                     .foregroundColor(Config.UI.Colors.utility)
@@ -49,7 +52,7 @@ struct ListStatusIcon: View {
                     .onDisappear { self.isRotating = false }
                 
             // Check if we should display an error icon:
-            } else if !self.mount.errors.isEmpty {
+            } else if !state.errors.isEmpty {
                 
                 Image(systemName: Config.UI.Icons.List.error)
                     .foregroundStyle(Config.UI.Colors.error)

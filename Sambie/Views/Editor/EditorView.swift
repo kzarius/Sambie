@@ -13,52 +13,84 @@ import SwiftUI
 struct EditorView: View {
     
     // MARK: - Properties
-    // Environment:
-    @Environment(MountFormState.self) private var mountFormState
+    // It might seem redundant but we need mountID because @Query cannot accept a Binding directly, it needs to be set up in init:
+    let mountID: PersistentIdentifier
+    @Query private var mounts: [Mount]
+    
     // States and bindings:
+    @Binding var editingMountID: PersistentIdentifier?
     @State private var doConnectionTest: Bool = false
     @State private var validationErrors: [Error] = []
+    // We store sambaURL here to pass to child views:
     @State private var sambaURL: String = ""
+    // The shared form data for the mount being edited:
+    @State private var formData: MountDataObject?
+    
+    private var editingMount: Mount? { self.mounts.first }
+    
+    
+    // MARK: - Initializer
+    init(mountID: PersistentIdentifier, editingMountID: Binding<PersistentIdentifier?>) {
+        self.mountID = mountID
+        self._editingMountID = editingMountID
+
+        // Configure the @Query to fetch the specific mount by its ID:
+        let predicate = #Predicate<Mount> { $0.persistentModelID == mountID }
+        _mounts = Query(filter: predicate)
+    }
     
     
     // MARK: - View
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if self.mountFormState.formData != nil {
+        // Ensure we have both the original mount and the form data to edit:
+        if let editingMount = self.editingMount, let formData = self.formData {
+            VStack(alignment: .leading, spacing: 0) {
                 EditorForm(
+                    formData: $formData,
                     doConnectionTest: self.$doConnectionTest,
                     validationErrors: self.$validationErrors,
                     sambaURL: self.$sambaURL
                 )
             }
-        }
-        .toolbar {
-            if self.mountFormState.editing != nil {
+            .toolbar {
                 // Action buttons:
                 EditorToolbar(
+                    editingMount: editingMount,
+                    formData: Binding(
+                        get: { formData },
+                        set: { self.formData = $0 }
+                    ),
+                    editingMountID: self.$editingMountID,
                     doConnectionTest: self.$doConnectionTest,
                     validationErrors: self.$validationErrors
                 )
             }
-        }
-        // Handle connection testing:
-        .onChange(of: self.doConnectionTest) { old, new in
-            if new {
-                // Reset after a delay to allow the test to complete:
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    self.doConnectionTest = false
+            // Handle connection testing:
+            .onChange(of: self.doConnectionTest) { old, new in
+                if new {
+                    // Reset after a delay to allow the test to complete:
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        self.doConnectionTest = false
+                    }
                 }
             }
-        }
-        // Initialize sambaURL when mount loads:
-        .onChange(of: self.mountFormState.formData) { _, newMount in
-            if let mount = newMount {
-                self.sambaURL = MountShare.buildURL(from: mount)
+            // Initialize sambaURL when mount loads:
+            .onAppear {
+                self.sambaURL = SambaURL.create(from: formData)
             }
-        }
-        .onAppear {
-            if let mount = self.mountFormState.formData {
-                self.sambaURL = MountShare.buildURL(from: mount)
+        } else {
+            ProgressView()
+            .onAppear {
+                // When the view appears, create the temporary data object from the real mount:
+                Task {
+                    if let mount = self.editingMount {
+                        do {
+                            self.formData = try await mount.toDataObject()
+                        } catch {
+                            self.validationErrors.append(error)
+                        }
+                    }
+                }
             }
         }
     }

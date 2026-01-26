@@ -13,8 +13,9 @@ struct Sambie: App {
     
     /// Determine if the mounts have been loaded.
     @State private var isInitialized: Bool = false
-    
     @State private var mountMonitor: MountMonitor?
+    @State private var mountStateManager = MountStateManager()
+    @State private var mountAccessor: MountAccessor
     
     /// The model container used to share the context between views.
     var sharedModelContainer: ModelContainer = {
@@ -34,18 +35,25 @@ struct Sambie: App {
         
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-//            container.mainContext.autosaveEnabled = false
             return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+    
+    
+    // MARK: - Initializer
+    init() {
+        let accessor = MountAccessor(modelContainer: sharedModelContainer)
+        _mountAccessor = State(initialValue: accessor)
+    }
 
+    
+    // MARK: - Body
     var body: some Scene {
         // Main window:
         Window("Mounts", id: "mounts-window") {
             WindowView()
-                .modelContainer(self.sharedModelContainer)
                 .overlay {
                     if !self.isInitialized {
                         // Show a loading indicator while initializing:
@@ -54,25 +62,34 @@ struct Sambie: App {
                             .background(Color(.windowBackgroundColor).opacity(0.8))
                             .task {
                                 // Monitor the mounts:
-                                self.mountMonitor = await MountMonitor(modelContainer: sharedModelContainer)
+                                self.mountMonitor = await MountMonitor(
+                                    accessor: self.mountAccessor,
+                                    stateManager: self.mountStateManager
+                                )
                                 await self.mountMonitor?.startMonitoring()
                                 self.isInitialized = true
                             }
                     }
                 }
+                .environment(self.mountStateManager)
+                .environment(\.mountAccessor, mountAccessor)
+                .modelContainer(self.sharedModelContainer)
         }
         
         // Menu bar:
         MenuBarExtra() {
             if self.isInitialized {
                 MenuBar()
+                    .environment(self.mountStateManager)
+                    .environment(\.mountAccessor, mountAccessor)
                     .modelContainer(self.sharedModelContainer)
             } else {
                 ProgressView("Loading...")
             }
         } label: {
             MenuBarIcon()
-                .modelContainer(self.sharedModelContainer)
+                .environment(self.mountStateManager)
+                .environment(\.mountAccessor, mountAccessor)
         }
     }
     

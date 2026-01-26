@@ -11,19 +11,26 @@ import SwiftUI
 struct ListView: View {
     
     // MARK: - Properties
-    @Query(sort: \Mount.name, order: .forward) var mounts: [Mount]
-    
+    @Binding var editingMountID: PersistentIdentifier?
+    @Query(sort: \Mount.order) private var mounts: [Mount]
+
     
     // MARK: - View
     var body: some View {
         List {
             // Show the list of mounts:
             ForEach(self.mounts) { mount in
-                ListRow(mount: mount)
+                ListRow(
+                    mount: mount,
+                    editingMountID: self.$editingMountID
+                )
             }
             
             // Row to "Add a new mount":
-            AddMountRow()
+            AddMountRow(editingMountID: $editingMountID)
+        }
+        .onAppear {
+            logger("ListView appeared with \(self.mounts.count) mounts.")
         }
         .navigationTitle("Mounts")
     }

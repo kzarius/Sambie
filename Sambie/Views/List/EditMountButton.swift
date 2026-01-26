@@ -12,7 +12,6 @@ import SwiftUI
 struct EditMountButton: View {
 
     // MARK: - Properties
-    let mount: Mount
     let onTap: () -> Void
 
     // MARK: - Body

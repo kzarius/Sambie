@@ -11,7 +11,9 @@ import SwiftData
 struct MenuBarIcon: View {
     
     // MARK: - Properties
-    @Query private var mounts: [Mount]
+    @Environment(\.mountAccessor) private var accessor
+    @Environment(MountStateManager.self) private var stateManager
+    @State private var mountIDs: [PersistentIdentifier] = []
     
     // Colors:
     private let checkmarkColor = Config.UI.Colors.primary
@@ -19,24 +21,31 @@ struct MenuBarIcon: View {
     
     // Runs a query to see if there are any connected mounts:
     private var hasConnectedMounts: Bool {
-        return self.mounts.contains {
-            $0.status == ConnectionStatus.connected ||
-            $0.status == ConnectionStatus.disconnecting
+        let connectedStatuses: Set<ConnectionStatus> = [.connected, .disconnecting]
+        return self.mountIDs.contains { (mountID: PersistentIdentifier) -> Bool in
+            let status = self.stateManager.getState(for: mountID).status
+            return connectedStatuses.contains(status)
         }
     }
     
 
     // MARK: - View
     var body: some View {
-        // Connected mounts icon:
-        if self.hasConnectedMounts {
-            Image(systemName: "externaldrive.fill.badge.checkmark")
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(self.checkmarkColor, .primary)
-        // Default icon:
-        } else {
-            Image(systemName: Config.UI.Icons.menuBar)
-                .foregroundColor(self.notConnectedColor)
+        Group {
+            // Connected mounts icon:
+            if self.hasConnectedMounts {
+                Image(systemName: "externaldrive.fill.badge.checkmark")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(self.checkmarkColor, .primary)
+                // Default icon:
+            } else {
+                Image(systemName: Config.UI.Icons.menuBar)
+                    .foregroundColor(self.notConnectedColor)
+            }
+        }
+        .task {
+            guard let accessor = self.accessor else { return }
+            self.mountIDs = await accessor.getAllMountIDs()
         }
     }
 }

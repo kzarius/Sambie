@@ -7,25 +7,24 @@
 
 import Foundation
 
+/// Errors related to mounting and unmounting Samba shares. Runtime errors that occur during actual mount operations (unreachable hosts, connection failures, unmount issues, etc.)
 enum ClientError: Error, LocalizedError, Hashable, Codable {
     
     // MARK: - Errors
     /// Mounting errors:
     case mountExists(path: String)
-    case mountFailed
+    case mountFailed(reason: String)
     case unmountFailed
     case unmountTimedOut
     case alreadyMounted(path: String)
     case permissionDenied
     case invalidMount
     case notFound
-    
-    /// Mountpoint errors:
-    case mountpointUnavailable(mountpoint: String)
-    case mountpointNotDirectory(mountpoint: String)
-    case mountpointNotWritable(mountpoint: String)
-    case mountpointDoesNotExist
-    case multipleMountPointsFound
+
+    /// Samba credential errors:
+    case invalidUsername
+    case invalidHost
+    case invalidShareName
     
     /// Other errors:
     case dbError
@@ -39,8 +38,8 @@ enum ClientError: Error, LocalizedError, Hashable, Codable {
         /// Mounting errors:
         case .mountExists(let path):
             return "A mount already exists at the specified path: \"\(path)\"."
-        case .mountFailed:
-            return "Failed to mount the specified source."
+        case .mountFailed(let reason):
+            return "Failed to mount the specified source: \(reason)"
         case .unmountFailed:
             return "Failed to unmount the specified target."
         case .unmountTimedOut:
@@ -54,17 +53,13 @@ enum ClientError: Error, LocalizedError, Hashable, Codable {
         case .notFound:
             return "The specified mount was not found."
             
-        /// Mountpoint errors:
-        case .mountpointUnavailable(let mountpoint):
-            return "The mountpoint \"\(mountpoint)\" is unavailable."
-        case .mountpointNotDirectory(let mountpoint):
-            return "The mountpoint \"\(mountpoint)\" is not a directory."
-        case .mountpointNotWritable(let mountpoint):
-            return "The mountpoint \"\(mountpoint)\" is not writable."
-        case .mountpointDoesNotExist:
-            return "The mountpoint could not be found."
-        case .multipleMountPointsFound:
-            return "Multiple mountpoints were found when only one was expected."
+            /// Samba credential errors:
+        case .invalidUsername:
+            return "The provided username is invalid."
+        case .invalidHost:
+            return "The provided host is invalid."
+        case .invalidShareName:
+            return "The provided share name is invalid."
             
         /// Other errors:
         case .dbError:

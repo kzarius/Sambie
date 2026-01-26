@@ -14,7 +14,7 @@ struct SambaURLParserField: View {
     // MARK: - Properties
     @Binding var urlString: String
     @Binding var validationErrors: [Error]
-    let mount: Mount
+    @Binding var formData: MountDataObject?
     
     private let parseIcon = Image(systemName: "arrow.down.circle")
     
@@ -56,24 +56,29 @@ struct SambaURLParserField: View {
     // MARK: - Methods
     /// Parses the URL and updates the mount's fields.
     private func parseURL() {
-        do {
-            let (user, host, share) = try MountShare.parseURL(self.urlString)
-            mount.user = user ?? ""
-            mount.host = host
-            mount.share = share
-            
-            // Clear URL-specific errors:
-            validationErrors.removeAll { error in
-                if let configError = error as? ConfigurationError,
-                   case .invalidURL = configError {
-                    return true
-                }
+        // Clear any previous URL parsing-related errors.
+        validationErrors.removeAll { error in
+            guard let configError = error as? ConfigurationError else { return false }
+            switch configError {
+            case .invalidURL, .missingHost, .missingShare, .invalidScheme:
+                return true
+            default:
                 return false
             }
+        }
+
+        do {
+            let (user, host, share) = try SambaURL.parse(urlString: self.urlString)
+            
+                // Ensure we have an editing mount to update, and update.
+                self.formData?.user = user
+                self.formData?.host = host
+                self.formData?.share = share
+            
         } catch {
-            if !validationErrors.contains(where: {
-                ($0 as? ConfigurationError) != nil
-            }) {
+            // Add the new error if it's not already in the list.
+            let newErrorDescription = error.localizedDescription
+            if !validationErrors.contains(where: { $0.localizedDescription == newErrorDescription }) {
                 validationErrors.append(error)
             }
         }

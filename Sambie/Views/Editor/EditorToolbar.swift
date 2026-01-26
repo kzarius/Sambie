@@ -1,4 +1,3 @@
-//
 //  EditorToolbar.swift
 //  Sambie
 //
@@ -7,19 +6,37 @@
 //  Created by Kaeo McKeague-Clark on 6/29/25.
 //
 
+import SwiftData
 import SwiftUI
 
 struct EditorToolbar: ToolbarContent {
     
     // MARK: - Properties
-    @Environment(\.modelContext) var modelContext
-    @Environment(MountFormState.self) private var mountFormState
+    @Environment(\.mountAccessor) private var accessor
+    @Environment(MountStateManager.self) private var stateManager
+    @Environment(\.modelContext) private var modelContext
+    
+    let editingMount: Mount
+    @Binding var formData: MountDataObject
+    @Binding var editingMountID: PersistentIdentifier?
     @Binding var doConnectionTest: Bool
     @Binding var validationErrors: [Error]
     
     // Actions helper for the logic:
     private var actions: EditorActions {
-        EditorActions(modelContext: modelContext, mountFormState: mountFormState)
+        // Ensure we have the accessor:
+        guard let accessor = self.accessor else {
+            fatalError("MountAccessor not found in environment.")
+        }
+        
+        return EditorActions(
+            accessor: accessor,
+            stateManager: self.stateManager,
+            modelContext: self.modelContext,
+            editingMount: self.editingMount,
+            editingMountID: self.$editingMountID,
+            formData: self.$formData
+        )
     }
     
     
@@ -34,8 +51,10 @@ struct EditorToolbar: ToolbarContent {
             // 1.) The cancel button:
             self.cancelButton()
             
+            // Unwrap the mount data:
+            if self.editingMount.isNew(in: self.modelContext) {
+                
             // 2.) We are adding a new mount:
-            if let mount = self.mountFormState.editing, !mount.exists(context: self.modelContext) {
                 self.addButton()
                 
             // 3.) Editing an existing mount:
@@ -54,18 +73,12 @@ struct EditorToolbar: ToolbarContent {
             title: "Add",
             validationErrors: self.$validationErrors
         ) {
-            try actions.addMount()
+            try self.actions.addMount()
         }
     }
     
     /// Triggers the saving of an existing mount.
     private func saveButton() -> some View {
-        // Ensure we have a mount to save:
-        guard let mount = self.mountFormState.editing else {
-            logger("No mount to save, displaying an empty view.", level: .error)
-            return AnyView(EmptyView())
-        }
-        
         // Confirmation dialog for remounting if connected:
         let dialog = ConfirmationDialogModel(
             title: "Remount Required",
@@ -73,7 +86,7 @@ struct EditorToolbar: ToolbarContent {
             items: [
                 ConfirmationDialogItem(
                     label: "Remount with New Credentials",
-                   validationErrors: self.$validationErrors
+                    validationErrors: self.$validationErrors
                 ) {
                     try await self.actions.saveWithRemount()
                 },
@@ -81,30 +94,29 @@ struct EditorToolbar: ToolbarContent {
                     label: "Save Without Remounting",
                     validationErrors: self.$validationErrors
                 ) {
-                    try self.actions.saveMount()
+                    Task {
+                        try self.actions.saveMount()
+                    }
                 }
             ]
         )
         
-        return AnyView(
-            ToolbarButton(
-                title: "Save",
-                // On save, if the mount is connected, show remount confirmation:
-                dialog: mount.status == .connected ? dialog : nil,
-                validationErrors: self.$validationErrors
-            ) {
-                try actions.saveMount()
+        let isConnected = self.stateManager.getState(for: editingMount.persistentModelID).status == .connected
+        
+        return ToolbarButton(
+            title: "Save",
+            // On save, if the mount is connected, show remount confirmation:
+            dialog: isConnected ? dialog : nil,
+            validationErrors: self.$validationErrors
+        ) {
+            Task {
+                try self.actions.saveMount()
             }
-        )
+        }
     }
     
     /// Triggers the deletion of the current mount.
     private func deleteButton() -> some View {
-        // Ensure we have a mount to save:
-        guard let mount = self.mountFormState.editing else {
-            return AnyView(EmptyView())
-        }
-        
         // Confirmation dialog for unmounting if connected:
         let dialog = ConfirmationDialogModel(
             title: "Unmount Required",
@@ -120,21 +132,25 @@ struct EditorToolbar: ToolbarContent {
                     label: "Delete Without Unmounting",
                     validationErrors: self.$validationErrors
                 ) {
-                    try self.actions.deleteMount()
+                    Task {
+                        try self.actions.deleteMount()
+                    }
                 }
             ]
         )
+            
+        let isConnected = self.stateManager.getState(for: self.formData.persistentID).status == .connected
         
-        return AnyView(
-            ToolbarButton(
-                title: "Delete",
-                // On delete, if the mount is connected, show unmount confirmation:
-                dialog: mount.status == .connected ? dialog : nil,
-                validationErrors: self.$validationErrors
-            ) {
+        return ToolbarButton(
+            title: "Delete",
+            // On delete, if the mount is connected, show unmount confirmation:
+            dialog: isConnected ? dialog : nil,
+            validationErrors: self.$validationErrors
+        ) {
+            Task {
                 try self.actions.deleteMount()
             }
-        )
+        }
     }
     
     /// Button to cancel the current operation and close the editor.
@@ -143,7 +159,9 @@ struct EditorToolbar: ToolbarContent {
             title: "Cancel",
             color: Config.UI.Colors.secondary
         ) {
-            self.actions.cancelEditing()
+            Task {
+                self.actions.cancelEditing()
+            }
             self.validationErrors.removeAll()
         }
     }
@@ -155,9 +173,12 @@ struct EditorToolbar: ToolbarContent {
             color: Config.UI.Colors.secondary,
             validationErrors: self.$validationErrors
         ) {
-            guard let mount = self.mountFormState.formData else { return }
-            try self.actions.validateMount(mount)
-            self.doConnectionTest = true
+            do {
+                try self.actions.validateMount()
+                self.doConnectionTest = true
+            } catch {
+                self.validationErrors.append(error)
+            }
         }
     }
 }

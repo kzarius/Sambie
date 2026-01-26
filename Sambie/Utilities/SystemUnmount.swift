@@ -8,7 +8,7 @@
 import Foundation
 import Darwin
 
-/// Unmount a volume using Swift native system calls.
+/// Unmount a volume using Darwin's unmount system call.
 /// - Parameters:
 ///   - path: The mount point path to unmount
 ///   - forcefully: Whether to force unmount (MNT_FORCE flag)

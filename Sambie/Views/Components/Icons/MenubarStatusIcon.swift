@@ -5,20 +5,23 @@
 //  Created by Kaeo McKeague-Clark on 10/10/25.
 //
 
+import SwiftData
 import SwiftUI
 
 struct MenuBarStatusIcon: View {
     // MARK: - Properties
-    let status: ConnectionStatus
-    let errors: [String]
+    let mountID: PersistentIdentifier
+    @Environment(MountStateManager.self) private var stateManager
     
     
     // MARK: - View
     var body: some View {
-        if !self.errors.isEmpty {
+        let state = stateManager.getState(for: mountID)
+        
+        if !state.errors.isEmpty {
             MenuErrorIcon()
         } else {
-            switch self.status {
+            switch state.status {
             case .connecting:
                 MenuConnectingIcon()
             case .connected:

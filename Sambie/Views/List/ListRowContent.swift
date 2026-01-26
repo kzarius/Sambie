@@ -7,6 +7,7 @@
 //  Created by Kaeo McKeague-Clark on [DATE]
 //
 
+import SwiftData
 import SwiftUI
 
 struct ListRowContent: View {
@@ -23,9 +24,9 @@ struct ListRowContent: View {
             }
         } label: {
             HStack {
-                ListStatusIcon(mount: mount)
+                ListStatusIcon(mountID: self.mount.persistentModelID)
 
-                Text(mount.name)
+                Text(self.mount.name)
                     .foregroundStyle(Config.UI.Colors.text)
 
                 Spacer()

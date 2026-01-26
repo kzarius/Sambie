@@ -16,49 +16,59 @@ struct MenuBarRow: View {
     
     // Declared:
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.mountAccessor) private var accessor
+    @Environment(MountStateManager.self) private var stateManager
     @State private var mountConnection: MountClient?
     
     
     // MARK: - View
     var body: some View {
-        Button(action: {
-            // Open the main window if there's an error:
-            if !self.mount.errors.isEmpty {
-                openWindow(id: "mounts-window")
-                return
+        Button {
+            Task {
+                let state = self.stateManager.getState(for: self.mount.persistentModelID)
+                
+                // Open the main window if there's an error:
+                if !state.errors.isEmpty {
+                    self.openWindow(id: "mounts-window")
+                    return
+                }
+                
+                // Otherwise, toggle the mount state:
+                await self.toggleMount()
             }
-            
-            // Otherwise, toggle the mount state:
-            self.toggleMount()
-        }) {
+        } label: {
             HStack {
-                MenuBarStatusIcon(
-                    status: self.mount.status,
-                    errors: self.mount.errors
-                )
+                MenuBarStatusIcon(mountID: self.mount.persistentModelID)
                     
-                Text(mount.name)
+                Text(self.mount.name)
             }
         }
         // Disable until we have a connection to the mount:
         .disabled(self.mountConnection == nil)
         .task {
-            self.mountConnection = await MountClient(mountID: self.mount.persistentModelID, modelContainer: self.modelContext.container)
+            guard let accessor = self.accessor else {
+                fatalError("Mount accessor is not available in MenuBarRow.")
+            }
+            
+            self.mountConnection = await MountClient(
+                mountID: self.mount.persistentModelID,
+                accessor: accessor,
+                stateManager: self.stateManager
+            )
         }
     }
     
-    private func toggleMount() {
-        Task {
-            if let mountConnection {
-                switch self.mount.status {
-                case .connected:
-                    await mountConnection.unmount()
-                case .disconnected:
-                    await mountConnection.mount()
-                default:
-                    break
-                }
+    /// Toggles the mount state between connected and disconnected.
+    @MainActor
+    private func toggleMount() async {
+        if let connection = self.mountConnection {
+            switch stateManager.getState(for: self.mount.persistentModelID).status {
+            case .connected:
+                await connection.unmount()
+            case .disconnected:
+                await connection.mount()
+            default:
+                break
             }
         }
     }

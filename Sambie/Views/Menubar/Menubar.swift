@@ -10,15 +10,15 @@ import SwiftData
 
 struct MenuBar: View {
     @Environment(\.openWindow) private var openWindow
-    @Query(sort: \Mount.name, order: .forward) private var mounts: [Mount]
+    @Query(sort: \Mount.name) private var mounts: [Mount]
     
     var body: some View {
         Group {
             // Mount list:
-            if mounts.isEmpty {
+            if self.mounts.isEmpty {
                 Text("No mounts found.")
             } else {
-                ForEach(mounts, id: \.name) { mount in
+                ForEach(self.mounts) { mount in
                     MenuBarRow(mount: mount)
                 }
             }
