@@ -20,25 +20,27 @@ extension Mount {
     }
     
     /// Creates a `MountDataObject` from the current `Mount` instance.
-    func toDataObject() async throws -> MountDataObject {
-        let keychain = await Keychain(service: Config.Paths.keychainService)
-        do {
-            let password = try await keychain.get(generateKeychainKey(for: self.id)) ?? ""
-            
-            return MountDataObject(
-                persistentID: self.persistentModelID,
-                id: self.id,
-                order: self.order,
-                name: self.name,
-                user: self.user,
-                password: password,
-                host: self.host,
-                port: self.port,
-                share: self.share
-            )
-        } catch {
-            throw ConfigurationError.keychainUnaccessible(reason: error.localizedDescription)
-        }
+    /// Calls the keychain to retrieve the stored password.
+    /// Also calls MountPointServices and fetches if the mount point exists.
+    /// - Throws: `ConfigurationError.keychainUnaccessible` if the keychain cannot be accessed.
+    /// - Returns: A `MountDataObject` representing the current mount.
+    func toDataObject() async -> MountDataObject {
+        let mountPoint = await MountPointService.getMountPoint(
+            forHost: self.host,
+            share: self.share
+        )
+        
+        return MountDataObject(
+            persistentID: self.persistentModelID,
+            id: self.id,
+            order: self.order,
+            name: self.name,
+            user: self.user,
+            host: self.host,
+            port: self.port,
+            share: self.share,
+            mountPoint: mountPoint
+        )
     }
     
     /// Checks if the current mount instance exists in the database with the given context.

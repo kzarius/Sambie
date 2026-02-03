@@ -69,6 +69,14 @@ actor MountMonitor {
         
         // Check each mount's status for changes:
         for mountID in mountIDs {
+            // Get the current recorded status:
+            let recordedStatus = await self.stateManager.getState(for: mountID).status
+            
+            // Skip updates if mount is actively connecting/disconnecting:
+            if recordedStatus == .connecting || recordedStatus == .disconnecting {
+                continue
+            }
+            
             // Determine whether the actual mount state differs from the manager's recorded transient state:
             let actualStatus: ConnectionStatus = await MountClient(
                 mountID: mountID,
@@ -76,9 +84,7 @@ actor MountMonitor {
                 stateManager: self.stateManager
             ).isMounted() ? .connected : .disconnected
             
-            // Compare actual mount status with recorded status:
-            let recordedStatus = await self.stateManager.getState(for: mountID).status
-            
+            // Update if there's a discrepancy:
             if actualStatus != recordedStatus {
                 await self.stateManager.setStatus(actualStatus, for: mountID)
             }

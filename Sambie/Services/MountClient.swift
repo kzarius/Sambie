@@ -91,7 +91,7 @@ actor MountClient: Sendable {
         
         // Gentle unmount:
         do {
-            if try await systemUnmount(path: mountPoint.mountPath) { return }
+            if try await systemUnmount(path: mountPoint.path) { return }
         } catch ClientError.unmountFailed {
             await logger("Gentle unmount failed, trying force unmount", level: .debug)
         } catch {
@@ -100,7 +100,7 @@ actor MountClient: Sendable {
         }
         
         // Forcefully unmount:
-        try await self.forceUnmount(path: mountPoint.mountPath)
+        try await self.forceUnmount(path: mountPoint.path)
     }
     
     /// Checks to see if the mount is already present.

@@ -115,21 +115,4 @@ extension SambaMount {
             )
         }
     }
-    
-    /// Ensures a directory exists under `/Volumes` to use as the mount point.
-    static func validateMountPoint(name: String) throws -> String {
-        let sanitizedName = name.replacingOccurrences(of: "/", with: "_")
-        let mountPath = "/Volumes/\(sanitizedName)"
-        let fm = FileManager.default
-
-        if !fm.fileExists(atPath: mountPath) {
-            try fm.createDirectory(
-                atPath: mountPath,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-        }
-
-        return mountPath
-    }
 }

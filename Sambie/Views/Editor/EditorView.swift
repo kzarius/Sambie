@@ -25,6 +25,8 @@ struct EditorView: View {
     @State private var sambaURL: String = ""
     // The shared form data for the mount being edited:
     @State private var formData: MountDataObject?
+    // Password field state (not stored in formData for security):
+    @State private var password: String = ""
     
     private var editingMount: Mount? { self.mounts.first }
     
@@ -47,6 +49,7 @@ struct EditorView: View {
             VStack(alignment: .leading, spacing: 0) {
                 EditorForm(
                     formData: $formData,
+                    password: self.$password,
                     doConnectionTest: self.$doConnectionTest,
                     validationErrors: self.$validationErrors,
                     sambaURL: self.$sambaURL
@@ -60,6 +63,7 @@ struct EditorView: View {
                         get: { formData },
                         set: { self.formData = $0 }
                     ),
+                    password: self.$password,
                     editingMountID: self.$editingMountID,
                     doConnectionTest: self.$doConnectionTest,
                     validationErrors: self.$validationErrors
@@ -76,7 +80,7 @@ struct EditorView: View {
             }
             // Initialize sambaURL when mount loads:
             .onAppear {
-                self.sambaURL = SambaURL.create(from: formData)
+                self.sambaURL = SambaURL.create(from: formData).absoluteString
             }
         } else {
             ProgressView()
@@ -84,11 +88,7 @@ struct EditorView: View {
                 // When the view appears, create the temporary data object from the real mount:
                 Task {
                     if let mount = self.editingMount {
-                        do {
-                            self.formData = try await mount.toDataObject()
-                        } catch {
-                            self.validationErrors.append(error)
-                        }
+                        self.formData = await mount.toDataObject()
                     }
                 }
             }

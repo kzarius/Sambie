@@ -17,7 +17,7 @@ enum Config: Sendable {
         static let serviceName = "com.kaeomc.sambie"
         static let dbPath = "sambie.sqlite"
         static let keychainService = "com.sambie.mounts"
-        static let sambaMountBase = "/Volumes"
+        static let sambaMountBase = "~/mnt"
     }
     
     enum Ports {

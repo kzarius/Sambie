@@ -10,7 +10,7 @@ import Foundation
 /// Represents a mounted filesystem volume.
 struct MountedVolume {
     /// The path where the volume is mounted (e.g., `/Volumes/ShareName`).
-    let mountPath: String
+    let path: String
     /// The source of the mount (e.g., `smb://user@host/share`).
     let sourceURL: URL?
 }

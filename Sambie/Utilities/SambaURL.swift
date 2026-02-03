@@ -44,10 +44,15 @@ struct SambaURL {
         return (user, host, share)
     }
     
+    /// Parses a Samba URL from a URL object.
+    static func parse(url: URL) throws -> (user: String, host: String, share: String) {
+        return try parse(urlString: url.absoluteString)
+    }
+    
     /// Creates a Samba URL string from a Mount object.
     /// - Parameter mount: The mount object containing the host, share, and user.
     /// - Returns: A formatted Samba URL string.
-    static func create(from mountData: MountDataObject) -> String {
+    static func create(from mountData: MountDataObject) -> URL {
         var components = URLComponents()
         components.scheme = "smb"
         components.host = mountData.host
@@ -57,6 +62,6 @@ struct SambaURL {
             components.user = mountData.user
         }
 
-        return components.string ?? ""
+        return components.url ?? URL(fileURLWithPath: "")
     }
 }

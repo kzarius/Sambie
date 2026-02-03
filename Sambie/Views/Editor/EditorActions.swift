@@ -44,18 +44,18 @@ class EditorActions {
     
     // MARK: - Form management
     /// Validates and adds a new mount.
-    func addMount() throws {
+    func addMount(password: String) throws {
         self.updateMountFromFormData()
         try self.validateMount()
-        try self.savePasswordToKeychain()
+        try self.savePasswordToKeychain(password: password)
         try self.saveAndClose()
     }
     
     /// Validates and saves an existing mount.
-    func saveMount() throws {
+    func saveMount(password: String) throws {
         self.updateMountFromFormData()
         try self.validateMount()
-        try self.savePasswordToKeychain()
+        try self.savePasswordToKeychain(password: password)
         try self.saveAndClose()
     }
     
@@ -132,17 +132,28 @@ class EditorActions {
     
     // MARK: - Keychain Management
     /// Helper to save password from formData.
-    private func savePasswordToKeychain() throws {
-        let keychain = Keychain(service: Config.Paths.keychainService)
-        try keychain.set(
-            self.formData.password,
-            key: generateKeychainKey(for: self.formData.id)
+    /// Saves password to system Keychain with SMB protocol attributes.
+    /// This allows `mount -t smbfs` to retrieve it automatically.
+    private func savePasswordToKeychain(password: String) throws {
+        let keychain = Keychain(
+            server: self.formData.host,
+            protocolType: .smb
         )
+            
+        try keychain.set(password, key: self.formData.user)
+        
+        logger("Saved password to system Keychain for \(self.formData.user)@\(self.formData.host)", level: .debug)
     }
     
     /// Helper to delete password from keychain once we delete the mount.
     private func deletePasswordFromKeychain() throws {
-        let keychain = Keychain(service: Config.Paths.keychainService)
-        try keychain.remove(generateKeychainKey(for: self.formData.id))
+        let keychain = Keychain(
+            server: self.formData.host,
+            protocolType: .smb
+        )
+        
+        try keychain.remove(self.formData.user)
+        
+        logger("Removed password from system Keychain for \(self.formData.user)@\(self.formData.host)", level: .debug)
     }
 }

@@ -12,6 +12,7 @@ struct CredentialsForm: View {
     
     // MARK: - Properties
     @Binding var formData: MountDataObject?
+    @Binding var password: String
     
     
     // MARK: - View
@@ -28,7 +29,7 @@ struct CredentialsForm: View {
                     }
                     
                     LabeledInputField(label: "Password") {
-                        SecureField("", text: $formData.password)
+                        SecureField("", text: self.$password)
                             .modifier(LargeTextFieldStyle())
                     }
                     

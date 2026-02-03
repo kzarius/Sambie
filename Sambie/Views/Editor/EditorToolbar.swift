@@ -18,6 +18,7 @@ struct EditorToolbar: ToolbarContent {
     
     let editingMount: Mount
     @Binding var formData: MountDataObject
+    @Binding var password: String
     @Binding var editingMountID: PersistentIdentifier?
     @Binding var doConnectionTest: Bool
     @Binding var validationErrors: [Error]
@@ -73,7 +74,7 @@ struct EditorToolbar: ToolbarContent {
             title: "Add",
             validationErrors: self.$validationErrors
         ) {
-            try self.actions.addMount()
+            try self.actions.addMount(password: self.password)
         }
     }
     
@@ -95,7 +96,7 @@ struct EditorToolbar: ToolbarContent {
                     validationErrors: self.$validationErrors
                 ) {
                     Task {
-                        try self.actions.saveMount()
+                        try self.actions.saveMount(password: self.password)
                     }
                 }
             ]
@@ -110,7 +111,7 @@ struct EditorToolbar: ToolbarContent {
             validationErrors: self.$validationErrors
         ) {
             Task {
-                try self.actions.saveMount()
+                try self.actions.saveMount(password: self.password)
             }
         }
     }

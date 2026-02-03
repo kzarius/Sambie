@@ -40,7 +40,7 @@ actor MountAccessor {
     /// Returns an array of tuples with the most important mount data.
     func getData(id mountID: PersistentIdentifier) async throws -> MountDataObject {
         let mount = try self.getMount(id: mountID)
-        return try await mount.toDataObject()
+        return await mount.toDataObject()
     }
 
     /// Deletes a Mount by its PersistentIdentifier.

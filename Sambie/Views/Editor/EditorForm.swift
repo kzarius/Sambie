@@ -15,6 +15,7 @@ struct EditorForm: View {
     // MARK: - Properties
     // Bound variables:
     @Binding var formData: MountDataObject?
+    @Binding var password: String
     @Binding var doConnectionTest: Bool
     @Binding var validationErrors: [Error]
     @Binding var sambaURL: String
@@ -93,7 +94,10 @@ struct EditorForm: View {
                 label: "Detailed",
                 icon: "apple.terminal.fill"
             ) {
-                CredentialsForm(formData: self.$formData)
+                CredentialsForm(
+                    formData: self.$formData,
+                    password: self.$password
+                )
             }
         }
     }
