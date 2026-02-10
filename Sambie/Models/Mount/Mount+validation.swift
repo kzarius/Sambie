@@ -14,9 +14,9 @@ extension Mount {
     
     /// Checks if the model is newly inserted into the context and not yet saved.
     func isNew(in context: ModelContext) -> Bool {
-        context.insertedModelsArray.contains {
+        self.isTemporary || context.insertedModelsArray.contains(where: {
             $0.persistentModelID == self.persistentModelID
-        }
+        })
     }
     
     /// Creates a `MountDataObject` from the current `Mount` instance.

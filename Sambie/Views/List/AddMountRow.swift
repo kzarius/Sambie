@@ -11,8 +11,7 @@ import SwiftData
 struct AddMountRow: View {
     
     // MARK: - Properties
-    @Environment(\.modelContext) private var modelContext
-    @Binding var editingMountID: PersistentIdentifier?
+    @Binding var editorState: EditorState
     
     
     // MARK: - View
@@ -36,10 +35,6 @@ struct AddMountRow: View {
     
     
     // MARK: - Methods
-    /// Creates a new Mount on the main context and sets it for editing.
-    private func addMount() {
-        let newMount = Mount()
-        self.modelContext.insert(newMount)
-        self.editingMountID = newMount.persistentModelID
-    }
+    /// Switches the editor state to creating a new mount.
+    private func addMount() { self.editorState = .creating }
 }

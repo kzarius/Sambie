@@ -9,7 +9,16 @@ import SwiftData
 import Foundation
 
 /// A data object representing a mount's configuration. Necessary for isolating mount data from SwiftData models.
-struct MountDataObject: Sendable, Identifiable {
+struct MountDataObject: Sendable, Identifiable, Equatable {
+    static func == (lhs: MountDataObject, rhs: MountDataObject) -> Bool {
+        lhs.persistentID == rhs.persistentID &&
+        lhs.name == rhs.name &&
+        lhs.user == rhs.user &&
+        lhs.host == rhs.host &&
+        lhs.port == rhs.port &&
+        lhs.share == rhs.share
+    }
+    
     var persistentID: PersistentIdentifier
     var id: UUID = UUID()
     var order: Int

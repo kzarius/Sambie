@@ -17,8 +17,7 @@ struct ListRow: View {
     @Environment(\.mountAccessor) private var accessor
     @Environment(MountStateManager.self) private var stateManager
 
-    // Binding for the currently editing mount ID. If it's not nil, it will trigger the editing window.
-    @Binding var editingMountID: PersistentIdentifier?
+    @Binding var editorState: EditorState
     // Connection to the mount:
     @State private var mountConnection: MountClient?
     
@@ -31,20 +30,35 @@ struct ListRow: View {
     // MARK: - View
     var body: some View {
         ZStack {
-            HStack {
-                // Content of the mount entry:
-                ListRowContent(mount: self.mount) {
-                    await self.handleMountToggle()
+            HStack(spacing: 0) {
+                // Drag handle area (fixed width, only this is draggable):
+                HStack {
+                    Image(systemName: "line.horizontal.3")
+                        .foregroundStyle(.gray)
+                        .padding(.horizontal, 8)
                 }
-
-                // Open in Finder button:
-                if self.transientState.status == .connected {
-//                        OpenInFinderButton(mountPoint: self.mount.actualMountPoint)
+                .frame(width: 40)
+                
+                HStack {
+                    
+                    // Content of the mount entry:
+                    ListRowContent(mount: self.mount)
+                    
+                    // Open in Finder button:
+                    if self.transientState.status == .connected {
+                        //                        OpenInFinderButton(mountPoint: self.mount.actualMountPoint)
+                    }
+                    
+                    // Edit button:
+                    EditMountButton {
+                        self.editMount()
+                    }
                 }
-
-                // Edit button:
-                EditMountButton {
-                    self.editMount()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    Task {
+                        await self.handleMountToggle()
+                    }
                 }
             }
         }
@@ -64,7 +78,7 @@ struct ListRow: View {
                 )
             }
         }
-        .padding()
+        .padding(8)
         .background(self.setBackgroundColor())
         .font(.title2)
         .cornerRadius(6)
@@ -104,7 +118,7 @@ struct ListRow: View {
     /// Triggers the editing view.
     private func editMount() {
         // Create the data object for the editor from the live model
-        self.editingMountID = self.mount.persistentModelID
+        self.editorState = .editing(self.mount.persistentModelID)
     }
     
     /// Creates a MountClient instance with the current mount and makes it available.

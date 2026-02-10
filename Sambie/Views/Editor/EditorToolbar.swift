@@ -12,33 +12,7 @@ import SwiftUI
 struct EditorToolbar: ToolbarContent {
     
     // MARK: - Properties
-    @Environment(\.mountAccessor) private var accessor
-    @Environment(MountStateManager.self) private var stateManager
-    @Environment(\.modelContext) private var modelContext
-    
-    let editingMount: Mount
-    @Binding var formData: MountDataObject
-    @Binding var password: String
-    @Binding var editingMountID: PersistentIdentifier?
-    @Binding var doConnectionTest: Bool
-    @Binding var validationErrors: [Error]
-    
-    // Actions helper for the logic:
-    private var actions: EditorActions {
-        // Ensure we have the accessor:
-        guard let accessor = self.accessor else {
-            fatalError("MountAccessor not found in environment.")
-        }
-        
-        return EditorActions(
-            accessor: accessor,
-            stateManager: self.stateManager,
-            modelContext: self.modelContext,
-            editingMount: self.editingMount,
-            editingMountID: self.$editingMountID,
-            formData: self.$formData
-        )
-    }
+    @Bindable var actions: EditorActions
     
     
     // MARK: - Body
@@ -53,7 +27,7 @@ struct EditorToolbar: ToolbarContent {
             self.cancelButton()
             
             // Unwrap the mount data:
-            if self.editingMount.isNew(in: self.modelContext) {
+            if self.actions.isNewMount {
                 
             // 2.) We are adding a new mount:
                 self.addButton()
@@ -72,9 +46,9 @@ struct EditorToolbar: ToolbarContent {
     private func addButton() -> some View {
         ToolbarButton(
             title: "Add",
-            validationErrors: self.$validationErrors
+            validationErrors: self.$actions.validationErrors
         ) {
-            try self.actions.addMount(password: self.password)
+            try self.actions.addMount()
         }
     }
     
@@ -87,31 +61,29 @@ struct EditorToolbar: ToolbarContent {
             items: [
                 ConfirmationDialogItem(
                     label: "Remount with New Credentials",
-                    validationErrors: self.$validationErrors
+                    validationErrors: self.$actions.validationErrors
                 ) {
                     try await self.actions.saveWithRemount()
                 },
                 ConfirmationDialogItem(
                     label: "Save Without Remounting",
-                    validationErrors: self.$validationErrors
+                    validationErrors: self.$actions.validationErrors
                 ) {
                     Task {
-                        try self.actions.saveMount(password: self.password)
+                        try self.actions.saveMount()
                     }
                 }
             ]
         )
         
-        let isConnected = self.stateManager.getState(for: editingMount.persistentModelID).status == .connected
-        
         return ToolbarButton(
             title: "Save",
             // On save, if the mount is connected, show remount confirmation:
-            dialog: isConnected ? dialog : nil,
-            validationErrors: self.$validationErrors
+            dialog: self.actions.isConnected ? dialog : nil,
+            validationErrors: self.$actions.validationErrors
         ) {
             Task {
-                try self.actions.saveMount(password: self.password)
+                try self.actions.saveMount()
             }
         }
     }
@@ -125,13 +97,13 @@ struct EditorToolbar: ToolbarContent {
             items: [
                 ConfirmationDialogItem(
                     label: "Unmount and Delete",
-                    validationErrors: self.$validationErrors
+                    validationErrors: self.$actions.validationErrors
                 ) {
                     try await self.actions.deleteWithUnmount()
                 },
                 ConfirmationDialogItem(
                     label: "Delete Without Unmounting",
-                    validationErrors: self.$validationErrors
+                    validationErrors: self.$actions.validationErrors
                 ) {
                     Task {
                         try self.actions.deleteMount()
@@ -139,14 +111,12 @@ struct EditorToolbar: ToolbarContent {
                 }
             ]
         )
-            
-        let isConnected = self.stateManager.getState(for: self.formData.persistentID).status == .connected
         
         return ToolbarButton(
             title: "Delete",
             // On delete, if the mount is connected, show unmount confirmation:
-            dialog: isConnected ? dialog : nil,
-            validationErrors: self.$validationErrors
+            dialog: self.actions.isConnected ? dialog : nil,
+            validationErrors: self.$actions.validationErrors
         ) {
             Task {
                 try self.actions.deleteMount()
@@ -160,10 +130,8 @@ struct EditorToolbar: ToolbarContent {
             title: "Cancel",
             color: Config.UI.Colors.secondary
         ) {
-            Task {
-                self.actions.cancelEditing()
-            }
-            self.validationErrors.removeAll()
+            self.actions.cancelEditing()
+            self.actions.validationErrors.removeAll()
         }
     }
 
@@ -172,14 +140,9 @@ struct EditorToolbar: ToolbarContent {
         ToolbarButton(
             title: "Test Connection",
             color: Config.UI.Colors.secondary,
-            validationErrors: self.$validationErrors
+            validationErrors: self.$actions.validationErrors
         ) {
-            do {
-                try self.actions.validateMount()
-                self.doConnectionTest = true
-            } catch {
-                self.validationErrors.append(error)
-            }
+            self.actions.triggerConnectionTest()
         }
     }
 }

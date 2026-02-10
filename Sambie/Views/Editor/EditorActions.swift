@@ -12,91 +12,153 @@ import SwiftUI
 import KeychainAccess
 
 @MainActor
-class EditorActions {
+@Observable
+final class EditorActions {
     
     // MARK: - Properties
+    // Published:
+    var formData: MountDataObject?
+    var password: String = ""
+    var doConnectionTest: Bool = false
+    var validationErrors: [Error] = []
+    var sambaURL: String = ""
+    
+    // Private:
     private let accessor: MountAccessor
     private let stateManager: MountStateManager
     private let modelContext: ModelContext
-    private let editingMount: Mount
+    private var mount: Mount?
+    private let onDismiss: () -> Void
     
-    @Binding private var editingMountID: PersistentIdentifier?
-    @Binding private var formData: MountDataObject
+    // Computed:
+    var isNewMount: Bool {
+        guard let mount = self.mount else { return false }
+        return mount.isNew(in: self.modelContext)
+    }
+    var isConnected: Bool {
+        guard let mount = self.mount else { return false }
+        return self.stateManager.getState(for: mount.persistentModelID).status == .connected
+    }
     
     
     // MARK: - Initializer
-    init(
+    private init(
         accessor: MountAccessor,
         stateManager: MountStateManager,
         modelContext: ModelContext,
-        editingMount: Mount,
-        editingMountID: Binding<PersistentIdentifier?>,
-        formData: Binding<MountDataObject>
+        onDismiss: @escaping () -> Void
     ) {
         self.accessor = accessor
         self.stateManager = stateManager
         self.modelContext = modelContext
-        self.editingMount = editingMount
-        self._editingMountID = editingMountID
-        self._formData = formData
+        self.onDismiss = onDismiss
     }
     
-    
-    // MARK: - Form management
-    /// Validates and adds a new mount.
-    func addMount(password: String) throws {
-        self.updateMountFromFormData()
-        try self.validateMount()
-        try self.savePasswordToKeychain(password: password)
-        try self.saveAndClose()
+    // MARK: - Static Methods
+    static func forNewMount(
+        accessor: MountAccessor,
+        stateManager: MountStateManager,
+        modelContext: ModelContext,
+        onDismiss: @escaping () -> Void
+    ) async -> EditorActions {
+        let actions = EditorActions(
+            accessor: accessor,
+            stateManager: stateManager,
+            modelContext: modelContext,
+            onDismiss: onDismiss
+        )
+        
+        // Fetch max order from saved mounts:
+        let maxOrder = (try? modelContext.fetch(FetchDescriptor<Mount>()).filter { !$0.isTemporary }.map(\.order).max()) ?? -1
+        
+        let newMount = Mount(order: maxOrder + 1)
+        newMount.isTemporary = true
+        modelContext.insert(newMount)
+        actions.mount = newMount
+        actions.formData = await newMount.toDataObject()
+        actions.sambaURL = SambaURL.create(from: actions.formData!).absoluteString
+        
+        return actions
     }
     
-    /// Validates and saves an existing mount.
-    func saveMount(password: String) throws {
-        self.updateMountFromFormData()
-        try self.validateMount()
-        try self.savePasswordToKeychain(password: password)
-        try self.saveAndClose()
-    }
-    
-    /// Deletes a mount.
-    func deleteMount() throws {
-        try self.deletePasswordFromKeychain()
-        self.modelContext.delete(self.editingMount)
-        try self.saveAndClose()
-    }
-    
-    /// Cancels editing and rolls back changes. A modelContext rollback is only necessary on new mounts because the newly created Mount model must be destroyed; existing mounts simply discard unsaved changes.
-    func cancelEditing() {
-        if self.editingMount.isNew(in: self.modelContext) {
-            self.modelContext.delete(self.editingMount)
+    static func forExistingMount(
+        mountID: PersistentIdentifier,
+        accessor: MountAccessor,
+        stateManager: MountStateManager,
+        modelContext: ModelContext,
+        onDismiss: @escaping () -> Void
+    ) async -> EditorActions? {
+        guard let existingMount = modelContext.model(for: mountID) as? Mount else {
+            return nil
         }
-        self.editingMountID = nil
+        
+        let actions = EditorActions(
+            accessor: accessor,
+            stateManager: stateManager,
+            modelContext: modelContext,
+            onDismiss: onDismiss
+        )
+        
+        actions.mount = existingMount
+        actions.formData = await existingMount.toDataObject()
+        actions.sambaURL = SambaURL.create(from: actions.formData!).absoluteString
+        
+        return actions
     }
     
     
-    // MARK: - Mount Operations
-    /// Saves and remounts a connected mount.
-    func saveWithRemount() async throws {
+    // MARK: - Public Methods
+    func addMount() throws {
+        guard let mount = self.mount else { return }
+        
         self.updateMountFromFormData()
         try self.validateMount()
-        try self.persist()
-
+        try self.savePasswordToKeychain(password: self.password)
+        mount.isTemporary = false
+        try self.modelContext.save()
+        self.onDismiss()
+    }
+    
+    func saveMount() throws {
+        self.updateMountFromFormData()
+        try self.validateMount()
+        try self.savePasswordToKeychain(password: self.password)
+        try self.modelContext.save()
+        self.onDismiss()
+    }
+    
+    func saveWithRemount() async throws {
+        guard let mount = self.mount else { return }
+        
+        self.updateMountFromFormData()
+        try self.validateMount()
+        try self.modelContext.save()
+        
         let client = await MountClient(
-            mountID: self.editingMount.persistentModelID,
+            mountID: mount.persistentModelID,
             accessor: self.accessor,
             stateManager: self.stateManager
         )
         await client.unmount()
         await client.mount()
-
-        self.editingMountID = nil
+        
+        self.onDismiss()
     }
     
-    /// Deletes and unmounts a connected mount.
+    func deleteMount() throws {
+        guard let mount = self.mount else { return }
+        
+        try self.deletePasswordFromKeychain()
+        self.modelContext.delete(mount)
+        try self.modelContext.save()
+        self.onDismiss()
+    }
+    
     func deleteWithUnmount() async throws {
+        guard let mount = self.mount else { return }
+        
         let client = await MountClient(
-            mountID: self.editingMount.persistentModelID,
+            mountID: mount.persistentModelID,
             accessor: self.accessor,
             stateManager: self.stateManager
         )
@@ -104,56 +166,75 @@ class EditorActions {
         try self.deleteMount()
     }
     
-    /// Updates the persistent model from the temporary form data object.
-    private func updateMountFromFormData() {
-        self.editingMount.name = self.formData.name
-        self.editingMount.user = self.formData.user
-        self.editingMount.host = self.formData.host
-        self.editingMount.port = self.formData.port
-        self.editingMount.share = self.formData.share
+    func cancelEditing() {
+        guard let mount = self.mount else { return }
+        
+        if mount.isNew(in: self.modelContext) {
+            self.modelContext.delete(mount)
+        }
+        self.onDismiss()
     }
     
-    /// Validates the mount fields.
-    func validateMount() throws {
-        try SambaMount.validateUsername(self.formData.user)
-        try SambaMount.validateHost(self.formData.host)
-        try SambaMount.validateShareName(self.formData.share)
-    }
-    
-    /// Persists changes to the model context.
-    private func persist() throws { try self.modelContext.save() }
-    
-    /// Saves changes and closes the editor.
-    private func saveAndClose() throws {
-        try self.persist()
-        self.editingMountID = nil
-    }
-    
-    
-    // MARK: - Keychain Management
-    /// Helper to save password from formData.
-    /// Saves password to system Keychain with SMB protocol attributes.
-    /// This allows `mount -t smbfs` to retrieve it automatically.
-    private func savePasswordToKeychain(password: String) throws {
-        let keychain = Keychain(
-            server: self.formData.host,
-            protocolType: .smb
-        )
+    func triggerConnectionTest() {
+        do {
+            try self.validateMount()
+            self.doConnectionTest = true
             
-        try keychain.set(password, key: self.formData.user)
-        
-        logger("Saved password to system Keychain for \(self.formData.user)@\(self.formData.host)", level: .debug)
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                self.doConnectionTest = false
+            }
+        } catch {
+            self.validationErrors.append(error)
+        }
     }
     
-    /// Helper to delete password from keychain once we delete the mount.
-    private func deletePasswordFromKeychain() throws {
+    func updateSambaURL() {
+        guard let formData = self.formData else { return }
+        self.sambaURL = SambaURL.create(from: formData).absoluteString
+    }
+    
+    
+    // MARK: - Private Methods
+    private func updateMountFromFormData() {
+        guard let mount = self.mount, let formData = self.formData else { return }
+        
+        mount.name = formData.name
+        mount.user = formData.user
+        mount.host = formData.host
+        mount.port = formData.port
+        mount.share = formData.share
+    }
+    
+    private func validateMount() throws {
+        guard let formData = self.formData else { return }
+        
+        try SambaMount.validateUsername(formData.user)
+        try SambaMount.validateHost(formData.host)
+        try SambaMount.validateShareName(formData.share)
+    }
+    
+    private func savePasswordToKeychain(password: String) throws {
+        guard let formData = self.formData else { return }
+        
         let keychain = Keychain(
-            server: self.formData.host,
+            server: formData.host,
             protocolType: .smb
         )
         
-        try keychain.remove(self.formData.user)
+        try keychain.set(password, key: formData.user)
+        logger("Saved password to system Keychain for \(formData.user)@\(formData.host)", level: .debug)
+    }
+    
+    private func deletePasswordFromKeychain() throws {
+        guard let formData = self.formData else { return }
         
-        logger("Removed password from system Keychain for \(self.formData.user)@\(self.formData.host)", level: .debug)
+        let keychain = Keychain(
+            server: formData.host,
+            protocolType: .smb
+        )
+        
+        try keychain.remove(formData.user)
+        logger("Removed password from system Keychain for \(formData.user)@\(formData.host)", level: .debug)
     }
 }

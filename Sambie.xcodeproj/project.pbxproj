@@ -34,9 +34,22 @@
 		D9FA0BD12E98E05C0001802D /* SambieUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SambieUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D96631202F348DB20096A742 /* Exceptions for "Sambie" folder in "Sambie" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D9FA0BB72E98E05B0001802D /* Sambie */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D9FA0BBA2E98E05B0001802D /* Sambie */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D96631202F348DB20096A742 /* Exceptions for "Sambie" folder in "Sambie" target */,
+			);
 			path = Sambie;
 			sourceTree = "<group>";
 		};
@@ -420,6 +433,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Sambie/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sambie;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -466,6 +480,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Sambie/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sambie;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

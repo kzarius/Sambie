@@ -22,6 +22,9 @@ final class Mount {
     var port: Int       // The port number to connect to. Default is 445.
     var share: String   // The share name on the server.
     
+    // Flagged mounts are there as newly added mounts, not quite meant to be saved yet. They are used to show the new mount in the list immediately after creation, before the user has hit "Save" in the editor.
+    @Transient var isTemporary: Bool = false
+    
     
     // MARK: - Initializer
     /// Initializes a new mount with default values.
@@ -32,7 +35,8 @@ final class Mount {
         user: String = "guest",
         host: String = "server.local",
         port: Int = Config.Ports.samba,
-        share: String = "share"
+        share: String = "share",
+        isTemporary: Bool = false
     ) {
         self.id = id ?? UUID()
         self.order = order
@@ -41,5 +45,6 @@ final class Mount {
         self.host = host
         self.port = port
         self.share = share
+        self.isTemporary = isTemporary
     }
 }

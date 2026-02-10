@@ -11,31 +11,19 @@ import SwiftData
 struct WindowView: View {
     
     // MARK: - Properties
-    @State private var editingMountID: PersistentIdentifier?
+    @State private var editorState: EditorState = .closed
     
-    // Computed binding to control the sheet's presentation
-    private var isEditing: Binding<Bool> {
-        Binding(
-            get: { self.editingMountID != nil },
-            set: { if !$0 { self.editingMountID = nil } }
-        )
-    }
     
     // MARK: - View
     var body: some View {
-        
-        ListView(editingMountID: self.$editingMountID)
-            .frame(minWidth: 200)
-            // Editor Sheet:
-            // When editingMountData is not nil, present the EditorView sheet.
-            .sheet(isPresented: self.isEditing) {
-                // Ensure we have an ID to edit
-                if let mountID = self.editingMountID {
-                    EditorView(
-                        mountID: mountID,
-                        editingMountID: self.$editingMountID
-                    )
-                }
-            }
+        ListView(editorState: self.$editorState)
+        .frame(minWidth: 200)
+        // Open the editor sheet when it's state is not closed:
+        .sheet(isPresented: Binding(
+            get: { self.editorState != .closed },
+            set: { if !$0 { self.editorState = .closed } }
+        )) {
+            EditorView(state: self.$editorState)
+        }
     }
 }

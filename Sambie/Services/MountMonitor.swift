@@ -25,23 +25,8 @@ actor MountMonitor {
         self.accessor = accessor
         self.stateManager = stateManager
         
-        // Fetch all mounts:
-        let mountIDs = await self.accessor.getAllMountIDs()
-        
-        // Check each mount's status:
-        for mountID in mountIDs {
-            let isMounted = await MountClient(
-                mountID: mountID,
-                accessor: self.accessor,
-                stateManager: self.stateManager
-            ).isMounted()
-
-            // Update state on the MainActor-managed state manager:
-            await self.stateManager.setStatus(
-                isMounted ? .connected : .disconnected,
-                for: mountID
-            )
-        }
+        // Initialize all mount states in parallel:
+        await self.initializeAllStatuses()
     }
     
     deinit { monitoringTask?.cancel() }
@@ -62,31 +47,82 @@ actor MountMonitor {
     
     
     // MARK: - Private Methods
+    /// Initializes the status of all mounts in parallel during actor initialization.
+    private func initializeAllStatuses() async {
+        let mountIDs = await self.accessor.getAllMountIDs()
+        
+        // Check each mount's status in parallel:
+        await withTaskGroup(of: (PersistentIdentifier, Bool).self) { group in
+            for mountID in mountIDs {
+                group.addTask {
+                    let isMounted = await MountClient(
+                        mountID: mountID,
+                        accessor: self.accessor,
+                        stateManager: self.stateManager
+                    ).isMounted()
+                    return (mountID, isMounted)
+                }
+            }
+            
+            // Collect results and update state:
+            for await (mountID, isMounted) in group {
+                await self.stateManager.setStatus(
+                    isMounted ? .connected : .disconnected,
+                    for: mountID
+                )
+            }
+        }
+    }
+    
     /// Checks and updates the status of all mounts.
     private func updateAllStatuses() async {
         // Retrieve all mounts:
         let mountIDs = await self.accessor.getAllMountIDs()
         
-        // Check each mount's status for changes:
-        for mountID in mountIDs {
-            // Get the current recorded status:
-            let recordedStatus = await self.stateManager.getState(for: mountID).status
-            
-            // Skip updates if mount is actively connecting/disconnecting:
-            if recordedStatus == .connecting || recordedStatus == .disconnecting {
-                continue
+        // Check each mount's status for changes at the same time:
+        await withTaskGroup(of: (PersistentIdentifier, ConnectionStatus, ConnectionStatus).self) { group in
+            // Add all check tasks to the group:
+            for mountID in mountIDs {
+                group.addTask {
+                    do {
+                        // Verify mount exists and is not new before checking:
+                        guard await self.accessor.exists(id: mountID),
+                              try await self.accessor.getData(id: mountID).isNew == false else {
+                            // Mount was deleted or not yet saved, skip it:
+                            return (mountID, .disconnected, .disconnected)
+                        }
+                    } catch {
+                        // Failed to get mount data, skip it:
+                        return (mountID, .disconnected, .disconnected)
+                    }
+                    
+                    // Get the current recorded status:
+                    let recordedStatus = await self.stateManager.getState(for: mountID).status
+                    
+                    // Skip if transitioning:
+                    guard recordedStatus != .connecting, recordedStatus != .disconnecting else {
+                        return (mountID, recordedStatus, recordedStatus)
+                    }
+                    
+                    // Check actual mount status:
+                    let isMounted = await MountClient(
+                        mountID: mountID,
+                        accessor: self.accessor,
+                        stateManager: self.stateManager
+                    ).isMounted()
+                    let actualStatus: ConnectionStatus = isMounted ? .connected : .disconnected
+                    
+                    return (mountID, recordedStatus, actualStatus)
+                }
             }
             
-            // Determine whether the actual mount state differs from the manager's recorded transient state:
-            let actualStatus: ConnectionStatus = await MountClient(
-                mountID: mountID,
-                accessor: self.accessor,
-                stateManager: self.stateManager
-            ).isMounted() ? .connected : .disconnected
-            
-            // Update if there's a discrepancy:
-            if actualStatus != recordedStatus {
-                await self.stateManager.setStatus(actualStatus, for: mountID)
+            // Update state for any changed statuses:
+            for await (mountID, recordedStatus, actualStatus) in group {
+                // Double-check mount still exists before updating:
+                guard await self.accessor.exists(id: mountID) else { continue }
+                if actualStatus != recordedStatus {
+                    await self.stateManager.setStatus(actualStatus, for: mountID)
+                }
             }
         }
     }

@@ -14,28 +14,17 @@ struct ListRowContent: View {
 
     // MARK: - Properties
     let mount: Mount
-    let onTap: () async -> Void
 
+    
     // MARK: - Body
     var body: some View {
-        Button {
-            Task {
-                await self.onTap()
-            }
-        } label: {
-            HStack {
-                ListStatusIcon(mountID: self.mount.persistentModelID)
-
-                Text(self.mount.name)
-                    .foregroundStyle(Config.UI.Colors.text)
-
-                Spacer()
-            }
-            .padding(.vertical, 8)
-            .padding(.leading, 8)
-            .contentShape(Rectangle())
+        HStack {
+            ListStatusIcon(mountID: self.mount.persistentModelID)
+            Text(self.mount.name)
+                .foregroundStyle(Config.UI.Colors.text)
+            Spacer()
         }
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .buttonStyle(PlainButtonStyle())
     }
 }

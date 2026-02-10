@@ -13,7 +13,9 @@ struct ConnectionTestView: View {
     
     // MARK: - Properties
     // Bound properties:
-    var host: String
+    let host: String
+    let share: String
+    let username: String
     @State private var results: String? = nil
     @State private var isLoading: Bool = true
     @State private var viewID: UUID = UUID()
@@ -80,8 +82,17 @@ struct ConnectionTestView: View {
     /// - Throws an error if the connection fails.
     private func runTest() async {
         do {
-            // Test the mount's connection via ConnectMount():
-            try await MountReadiness.checkMount(host: self.host)
+            try SambaMount.validateUsername(self.username)
+            try SambaMount.validateHost(self.host)
+            try SambaMount.validateShareName(self.share)
+            // Step 1: Verify DNS resolution
+            try await SambaMount.verifyHostResolvable(host: self.host)
+            
+            // Step 2: Verify SMB port accessibility
+            try await SambaMount.checkPortAccessible(
+                host: self.host,
+                port: Config.Ports.samba
+            )
             
             // No errors will produce this:
             self.results = ""

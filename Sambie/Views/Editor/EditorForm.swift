@@ -14,12 +14,7 @@ struct EditorForm: View {
     
     // MARK: - Properties
     // Bound variables:
-    @Binding var formData: MountDataObject?
-    @Binding var password: String
-    @Binding var doConnectionTest: Bool
-    @Binding var validationErrors: [Error]
-    @Binding var sambaURL: String
-    
+    @Bindable var actions: EditorActions
     @State private var showConnectionTest: Bool = false
     
     // Constants for layout:
@@ -35,26 +30,28 @@ struct EditorForm: View {
             VStack(spacing: 26) {
                 
                 // If there was an error, show it:
-                if !self.validationErrors.isEmpty {
-                    EditorErrorPopup(validationErrors: self.$validationErrors)
+                if !self.actions.validationErrors.isEmpty {
+                    EditorErrorPopup(validationErrors: self.$actions.validationErrors)
                 }
                 
                 // Default blocks that will always need rendering:
                 self.standardBlocksView
                 
                 // Connection test results:
-                if self.showConnectionTest, let formData = self.formData {
+                if self.showConnectionTest, let formData = self.actions.formData {
                     VStack {
                         ConnectionTestView(
                             host: formData.host,
-                            trigger: self.doConnectionTest
+                            share: formData.share,
+                            username: formData.user,
+                            trigger: self.actions.doConnectionTest
                         )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             // When we're testing the connection, show the view:
-            .onChange(of: self.doConnectionTest) { _, newValue in
+            .onChange(of: self.actions.doConnectionTest) { _, newValue in
                 if newValue {
                     self.showConnectionTest = true
                 }
@@ -71,8 +68,8 @@ struct EditorForm: View {
                 icon: "person.fill"
             ) {
                 TextField("", text: Binding(
-                    get: { self.formData?.name ?? "" },
-                    set: { self.formData?.name = $0 }
+                    get: { self.actions.formData?.name ?? "" },
+                    set: { self.actions.formData?.name = $0 }
                 ))
                     .modifier(LargeTextFieldStyle())
             }
@@ -83,9 +80,9 @@ struct EditorForm: View {
                 icon: "link"
             ) {
                 SambaURLParserField(
-                    urlString: self.$sambaURL,
-                    validationErrors: self.$validationErrors,
-                    formData: self.$formData
+                    urlString: self.$actions.sambaURL,
+                    validationErrors: self.$actions.validationErrors,
+                    formData: self.$actions.formData
                 )
             }
             
@@ -95,8 +92,8 @@ struct EditorForm: View {
                 icon: "apple.terminal.fill"
             ) {
                 CredentialsForm(
-                    formData: self.$formData,
-                    password: self.$password
+                    formData: self.$actions.formData,
+                    password: self.$actions.password
                 )
             }
         }
