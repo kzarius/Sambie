@@ -16,7 +16,9 @@ struct MountDataObject: Sendable, Identifiable, Equatable {
         lhs.user == rhs.user &&
         lhs.host == rhs.host &&
         lhs.port == rhs.port &&
-        lhs.share == rhs.share
+        lhs.share == rhs.share &&
+        lhs.isNew == rhs.isNew &&
+        lhs.autoReconnect == rhs.autoReconnect
     }
     
     var persistentID: PersistentIdentifier
@@ -27,7 +29,7 @@ struct MountDataObject: Sendable, Identifiable, Equatable {
     var host: String
     var port: Int
     var share: String
+    var autoReconnect: Bool
     // Object-specific:
     var isNew: Bool = false
-    var mountPoint: MountedVolume?
 }

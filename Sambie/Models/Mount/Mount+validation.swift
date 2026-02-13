@@ -25,10 +25,6 @@ extension Mount {
     /// - Throws: `ConfigurationError.keychainUnaccessible` if the keychain cannot be accessed.
     /// - Returns: A `MountDataObject` representing the current mount.
     func toDataObject() async -> MountDataObject {
-        let mountPoint = await MountPointService.getMountPoint(
-            forHost: self.host,
-            share: self.share
-        )
         
         return MountDataObject(
             persistentID: self.persistentModelID,
@@ -39,7 +35,7 @@ extension Mount {
             host: self.host,
             port: self.port,
             share: self.share,
-            mountPoint: mountPoint
+            autoReconnect: self.autoReconnect
         )
     }
     

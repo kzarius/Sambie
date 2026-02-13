@@ -22,6 +22,10 @@ final class Mount {
     var port: Int       // The port number to connect to. Default is 445.
     var share: String   // The share name on the server.
     
+    // Reconnection properties:
+    var autoReconnect: Bool = false
+    var wasUnexpectedlyDisconnected: Bool = false // Whether the mount was unexpectedly disconnected. Used to trigger auto-reconnect attempts.
+    
     // Flagged mounts are there as newly added mounts, not quite meant to be saved yet. They are used to show the new mount in the list immediately after creation, before the user has hit "Save" in the editor.
     @Transient var isTemporary: Bool = false
     

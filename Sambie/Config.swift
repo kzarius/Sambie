@@ -86,4 +86,12 @@ enum Config: Sendable {
         // Interval for checking if a mount is still connected:
         nonisolated static let checkMountInterval = 10.0
     }
+
+    enum Reconnection {
+        static let baseDelay = 5.0 // Seconds that we start our reconnection attempts with.
+        static let maxMinutesDelay = 5.0 // Maximum delay between reconnection attempts in minutes.
+        static let maxReconnectAttempts = 5
+        static let initialReconnectDelay = 5.0
+        static let maxReconnectDelay = 300.0
+    }
 }

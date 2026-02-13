@@ -24,12 +24,13 @@ final actor SambaMount {
         self.accessor = accessor
 
         // Load configuration (includes host, share, user, etc.):
-        let mountData = try await self.accessor.getData(id: mountID)
+        guard let mountData = await self.accessor.getData(id: mountID) else {
+            throw ClientError.notFound
+        }
 
         // Verify connection prerequisites (keep your existing implementations):
         try await SambaMount.verifyHostResolvable(host: mountData.host)
         try await SambaMount.checkPortAccessible(host: mountData.host, port: mountData.port)
-
         // Perform the actual mount via `mount_smbfs`:
         try await SambaMount.mountShare(mountData: mountData)
 

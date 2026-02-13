@@ -32,11 +32,6 @@ actor MountClient: Sendable {
         self.mountID = mountID
         self.accessor = accessor
         self.stateManager = stateManager
-
-        // Ensure the mount exists:
-        if await accessor.exists(id: mountID) == false {
-            fatalError("Mount with ID \(mountID) does not exist in accessor. Something isn't right.")
-        }
     }
     
     
@@ -78,20 +73,39 @@ actor MountClient: Sendable {
             mountID: mountID,
             accessor: accessor
         )
+        
         await logger ("State of mount: \(self.isMounted() ? "mounted" : "not mounted")", level: .debug)
     }
     
     /// Attempt to unmount the directory.
     func doUnmount() async throws {
-        // Ensure the mount is actually mounted and discover its path.
-        guard let mountPoint = await self.getMountPoint() else {
+        guard let mountData = await self.accessor.getData(id: self.mountID) else {
+            await logger("Attempted to unmount, but mount data could not be retrieved.", level: .error)
+            throw ClientError.notFound
+        }
+        
+        // If the mount is already unmounted, return early:
+        do {
+            try await SambaMount.checkForMountInSystem(
+                user: mountData.user,
+                host: mountData.host,
+                share: mountData.share
+            )
+        } catch {
             await logger("Attempted to unmount, but mount is not currently mounted.", level: .debug)
             return
         }
         
+        // Get the mount point for the share:
+        let mountPoint = try await SambaMount.getMountPath(
+            user: mountData.user,
+            host: mountData.host,
+            share: mountData.share
+        )
+        
         // Gentle unmount:
         do {
-            if try await systemUnmount(path: mountPoint.path) { return }
+            if try await systemUnmount(path: mountPoint) { return }
         } catch ClientError.unmountFailed {
             await logger("Gentle unmount failed, trying force unmount", level: .debug)
         } catch {
@@ -100,13 +114,32 @@ actor MountClient: Sendable {
         }
         
         // Forcefully unmount:
-        try await self.forceUnmount(path: mountPoint.path)
+        try await self.forceUnmount(path: mountPoint)
     }
     
     /// Checks to see if the mount is already present.
     /// - Returns: A boolean indicating if the mount is present.
     func isMounted() async -> Bool {
-        return await self.getMountPoint() != nil
+        do {
+            guard let mountData = await self.accessor.getData(id: self.mountID) else {
+                await logger("Attempted to check if mount is mounted, but mount data could not be retrieved.", level: .error)
+                throw ClientError.notFound
+            }
+            
+            await logger("Checking if mount `\(SambaURL.create(from: mountData))` is mounted...", level: .debug)
+            
+            try await SambaMount.checkForMountInSystem(
+                user: mountData.user,
+                host: mountData.host,
+                share: mountData.share
+            )
+            await logger(" - ✅ Mount is mounted.", level: .debug)
+        } catch {
+            await logger(" - ❌ Mount is not mounted.", level: .debug)
+            return false
+        }
+        
+        return true
     }
     
     /// Dismiss the error for the mount, setting it to nil and update the status based on whether the mount is still mounted.
@@ -118,18 +151,6 @@ actor MountClient: Sendable {
     
     
     // MARK: - Private Methods
-    /// Retrieves the current mount point for the share.
-    /// - Returns: A `MountedVolume` if found, otherwise `nil`.
-    private func getMountPoint() async -> MountedVolume? {
-        do {
-            let mountData = try await self.accessor.getData(id: self.mountID)
-            return await MountPointService.getMountPoint(forHost: mountData.host, share: mountData.share)
-        } catch {
-            await logger("Failed to get mount data for ID \(self.mountID) to check mount point: \(error)", level: .error)
-            return nil
-        }
-    }
-    
     /// If the mount is stubborn, force unmount it.
     /// - Parameter path: The path to unmount.
     private func forceUnmount(path: String) async throws {

@@ -33,13 +33,16 @@ actor MountAccessor {
     /// - Parameter mountID: The PersistentIdentifier of the mount to check.
     /// - Returns: True if the mount exists, false otherwise.
     func exists(id mountID: PersistentIdentifier) async -> Bool {
-        return ((try? self.getMount(id: mountID)) != nil)
+        return ((self.getMount(id: mountID)) != nil)
     }
     
     // MARK: - Data Accessors
     /// Returns an array of tuples with the most important mount data.
-    func getData(id mountID: PersistentIdentifier) async throws -> MountDataObject {
-        let mount = try self.getMount(id: mountID)
+    func getData(id mountID: PersistentIdentifier) async -> MountDataObject? {
+        guard let mount = self.getMount(id: mountID) else {
+            Task { await logger("Attempted to get data for a mount that could not be found.", level: .debug) }
+            return nil
+        }
         var mountData = await mount.toDataObject()
         // Check if the mount is new:
         mountData.isNew = mount.isNew(in: self.modelContext)
@@ -48,7 +51,11 @@ actor MountAccessor {
 
     /// Deletes a Mount by its PersistentIdentifier.
     func deleteMount(id mountID: PersistentIdentifier) async throws {
-        let mount = try self.getMount(id: mountID)
+        guard let mount = self.getMount(id: mountID) else {
+            Task { await logger("Attempted to delete a mount that could not be found.", level: .debug) }
+            throw ClientError.notFound
+        }
+            
         self.modelContext.delete(mount)
 
         // Save context after deleting:
@@ -62,13 +69,33 @@ actor MountAccessor {
     func rollback() { self.modelContext.rollback() }
     
     /// Retrieves a Mount object by its PersistentIdentifier and model container.
-    func getMount(id mountID: PersistentIdentifier) throws -> Mount {
+    func getMount(id mountID: PersistentIdentifier) -> Mount? {
         // Fetch the mount. If it doesn't exist, return nil:
         guard let mount = self.modelContext.model(for: mountID) as? Mount else {
-            Task { await logger("Mount invalidated or not found.", level: .debug) }
-            throw ClientError.invalidMount
+            return nil
         }
         
         return mount
+    }
+    
+    // MARK: - Reconnect Accessors
+    /// Marks a mount as unexpectedly disconnected, which will trigger the reconnect logic in the UI.
+    func markUnexpectedDisconnect(_ mountID: PersistentIdentifier) throws {
+        guard let mount = self.getMount(id: mountID) else {
+            Task { await logger("Attempted to mark a mount as unexpectedly disconnected, but it could not be found.", level: .debug) }
+            throw ClientError.notFound
+        }
+        mount.wasUnexpectedlyDisconnected = true
+        try self.save()
+    }
+
+    /// Clears the unexpected disconnect flag for a mount, which will clear the reconnect UI.
+    func clearUnexpectedDisconnect(_ mountID: PersistentIdentifier) throws {
+        guard let mount = self.getMount(id: mountID) else {
+            Task { await logger("Attempted to clear unexpected disconnect for a mount, but it could not be found.", level: .debug) }
+            throw ClientError.notFound
+        }
+        mount.wasUnexpectedlyDisconnected = false
+        try self.save()
     }
 }

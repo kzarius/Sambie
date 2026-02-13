@@ -17,6 +17,8 @@ final class MountStateManager {
     struct MountState: Equatable {
         var status: ConnectionStatus = .disconnected
         var errors: [String] = []
+        var reconnectAttempts: Int = 0
+        var nextReconnectAt: Date?
     }
     
     private var states: [PersistentIdentifier: MountState] = [:]
@@ -31,6 +33,21 @@ final class MountStateManager {
     
     func getState(for mountID: PersistentIdentifier) -> MountState {
         self.states[mountID] ?? MountState()
+    }
+    
+    /// Sets the reconnect attempt count and next reconnect time for a specific mount.
+    func setReconnectAttempt(_ attempt: Int, nextAt: Date, for mountID: PersistentIdentifier) {
+        if self.states[mountID] == nil {
+            self.states[mountID] = MountState()
+        }
+        self.states[mountID]?.reconnectAttempts = attempt
+        self.states[mountID]?.nextReconnectAt = nextAt
+    }
+    
+    /// Increments the reconnect attempt count and sets the next reconnect time for a specific mount.
+    func resetReconnectAttempts(for mountID: PersistentIdentifier) {
+        self[mountID].reconnectAttempts = 0
+        self[mountID].nextReconnectAt = nil
     }
     
     
