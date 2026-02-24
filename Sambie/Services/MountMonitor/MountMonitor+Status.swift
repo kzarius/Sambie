@@ -27,12 +27,14 @@ extension MountMonitor {
                 }
             }
             
-            // Collect results and update state:
+            // Update state and schedule reconnects for any disconnected mounts:
             for await (mountID, isMounted) in group {
-                await self.stateManager.setStatus(
-                    isMounted ? .connected : .disconnected,
-                    for: mountID
-                )
+                if isMounted {
+                    await self.stateManager.setStatus(.connected, for: mountID)
+                } else {
+                    await self.stateManager.setStatus(.disconnected, for: mountID)
+                    await self.scheduleStartupReconnect(for: mountID)
+                }
             }
         }
     }

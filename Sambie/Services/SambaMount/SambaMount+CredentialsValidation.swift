@@ -6,10 +6,11 @@
 //
 
 import Foundation
+import KeychainAccess
 
+/// This extension adds methods to the SambaMount class for validating credentials and retrieving passwords from the Keychain.
 extension SambaMount {
     
-    // MARK: - Credentials Validation
     /// Validates that a username doesn't contain invalid characters.
     /// Usernames cannot contain: @ / \ : * ? " < > |
     static func validateUsername(_ user: String) throws {
@@ -43,6 +44,18 @@ extension SambaMount {
         let invalidCharacters = CharacterSet(charactersIn: "\\/:*?\"<>|")
         if !share.unicodeScalars.allSatisfy({ !invalidCharacters.contains($0) }) {
             throw ClientError.invalidShareName
+        }
+    }
+    
+    /// Retrieve the password for the specified mount data from the Keychain.
+    /// - Parameter mountData: The mount data object containing host and user information.
+    internal static func retrievePassword(for mountData: MountDataObject) async -> String? {
+        do {
+            let keychain = Keychain(server: mountData.host, protocolType: .smb)
+            return try keychain.get(mountData.user)
+        } catch {
+            await logger("Keychain access failed for \(mountData.user)@\(mountData.host)", level: .debug)
+            return nil
         }
     }
 }

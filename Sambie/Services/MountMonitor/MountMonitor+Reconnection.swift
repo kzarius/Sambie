@@ -76,4 +76,30 @@ extension MountMonitor {
             }
         }
     }
+
+    /// Immediately attempts to reconnect all auto-reconnect mounts that are disconnected at startup.
+    internal func scheduleStartupReconnect(for mountID: PersistentIdentifier) async {
+        // Check for mounts that should be auto-reconnected on startup:
+        guard let mountData = await self.accessor.getData(id: mountID),
+              mountData.autoReconnect else {
+            return
+        }
+
+        await logger("Startup reconnect triggered for \(mountData.name)", level: .info)
+        await self.stateManager.setStatus(.connecting, for: mountID)
+
+        // Perform the mount attempt:
+        Task {
+            await MountClient(
+                mountID: mountID,
+                accessor: self.accessor,
+                stateManager: self.stateManager
+            ).mount()
+
+            let newState = await self.stateManager.getState(for: mountID)
+            if newState.status == .disconnected {
+                await self.scheduleReconnect(for: mountID, attempt: 1)
+            }
+        }
+    }
 }

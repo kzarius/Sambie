@@ -30,15 +30,7 @@ struct ListRowContent: View {
             ListStatusIcon(mountID: self.mount.persistentModelID)
             
             // Auto-reconnect indicator:
-            Button {
-                self.mount.autoReconnect.toggle()
-                try? modelContext.save()
-            } label: {
-                Image(systemName: self.mount.autoReconnect ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
-                    .foregroundStyle(self.mount.autoReconnect ? .blue : .secondary)
-                    .help(mount.autoReconnect ? "Auto-reconnect is enabled" : "Auto-reconnect is disabled")
-            }
-            .buttonStyle(.plain)
+            AutoReconnectButton(mount: self.mount)
             
             Text(self.mount.name)
                 .foregroundStyle(Config.UI.Colors.text)

@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D98183082EE2B69100E8BAC5 /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = D98183072EE2B69100E8BAC5 /* Subprocess */; };
-		D9E8E6E82ED838CF00426A41 /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D9E8E6E72ED838CF00426A41 /* KeychainAccess */; };
+		D9B2A9162F4C3E8900644A9E /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = D9B2A9152F4C3E8900644A9E /* Subprocess */; };
+		D9B2A9192F4C3EA200644A9E /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D9B2A9182F4C3EA200644A9E /* KeychainAccess */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,8 +70,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D9E8E6E82ED838CF00426A41 /* KeychainAccess in Frameworks */,
-				D98183082EE2B69100E8BAC5 /* Subprocess in Frameworks */,
+				D9B2A9192F4C3EA200644A9E /* KeychainAccess in Frameworks */,
+				D9B2A9162F4C3E8900644A9E /* Subprocess in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,8 +132,8 @@
 			);
 			name = Sambie;
 			packageProductDependencies = (
-				D9E8E6E72ED838CF00426A41 /* KeychainAccess */,
-				D98183072EE2B69100E8BAC5 /* Subprocess */,
+				D9B2A9152F4C3E8900644A9E /* Subprocess */,
+				D9B2A9182F4C3EA200644A9E /* KeychainAccess */,
 			);
 			productName = Sambie;
 			productReference = D9FA0BB82E98E05B0001802D /* Sambie.app */;
@@ -218,8 +218,8 @@
 			mainGroup = D9FA0BAF2E98E05B0001802D;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */,
-				D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */,
+				D9B2A9142F4C3E8900644A9E /* XCRemoteSwiftPackageReference "swift-subprocess" */,
+				D9B2A9172F4C3EA200644A9E /* XCRemoteSwiftPackageReference "KeychainAccess" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D9FA0BB92E98E05B0001802D /* Products */;
@@ -628,33 +628,33 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */ = {
+		D9B2A9142F4C3E8900644A9E /* XCRemoteSwiftPackageReference "swift-subprocess" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/swiftlang/swift-subprocess.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.2.1;
+				minimumVersion = 0.3.0;
 			};
 		};
-		D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */ = {
+		D9B2A9172F4C3EA200644A9E /* XCRemoteSwiftPackageReference "KeychainAccess" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kishikawakatsumi/KeychainAccess";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
+				branch = master;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		D98183072EE2B69100E8BAC5 /* Subprocess */ = {
+		D9B2A9152F4C3E8900644A9E /* Subprocess */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = D98183062EE2B69100E8BAC5 /* XCRemoteSwiftPackageReference "swift-subprocess" */;
+			package = D9B2A9142F4C3E8900644A9E /* XCRemoteSwiftPackageReference "swift-subprocess" */;
 			productName = Subprocess;
 		};
-		D9E8E6E72ED838CF00426A41 /* KeychainAccess */ = {
+		D9B2A9182F4C3EA200644A9E /* KeychainAccess */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = D9E8E6E62ED838CF00426A41 /* XCRemoteSwiftPackageReference "KeychainAccess" */;
+			package = D9B2A9172F4C3EA200644A9E /* XCRemoteSwiftPackageReference "KeychainAccess" */;
 			productName = KeychainAccess;
 		};
 /* End XCSwiftPackageProductDependency section */
