@@ -149,6 +149,37 @@ actor MountClient: Sendable {
         )
     }
     
+    /// Skips gentle unmount and goes straight to force unmount.
+    /// Used when the server is suspected unreachable (zombie mount).
+    func forceUnmountZombie() async {
+        await self.updateState(status: .disconnecting)
+        do {
+            await logger("Attempting to force unmount suspected zombie mount with ID \(self.mountID)", level: .warning)
+            
+            // Retrieve mount data:
+            guard let mountData = await self.accessor.getData(id: self.mountID) else {
+                await logger("🧟 Attempted to force unmount zombie, but mount data could not be retrieved.", level: .error)
+                await self.updateState(status: .connected)
+                return
+            }
+
+            // Get the mount point for the share:
+            let mountPoint = try await SambaMount.getMountPath(
+                user: mountData.user,
+                host: mountData.host,
+                share: mountData.share
+            )
+
+            // Force unmount:
+            try await self.forceUnmount(path: mountPoint)
+            await self.updateState(status: .disconnected)
+            await logger("🧟 Successfully force unmounted suspected zombie mount with ID \(self.mountID)", level: .warning)
+        } catch {
+            let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
+            await self.updateState(status: status, errors: [error])
+        }
+    }
+    
     
     // MARK: - Private Methods
     /// If the mount is stubborn, force unmount it.

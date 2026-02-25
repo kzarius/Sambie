@@ -83,15 +83,15 @@ enum Config: Sendable {
     }
     
     enum Connection {
-        // Interval for checking if a mount is still connected:
-        nonisolated static let checkMountInterval = 10.0
-    }
-
-    enum Reconnection {
-        static let baseDelay = 5.0 // Seconds that we start our reconnection attempts with.
-        static let maxMinutesDelay = 5.0 // Maximum delay between reconnection attempts in minutes.
-        static let maxReconnectAttempts = 5
-        static let initialReconnectDelay = 5.0
-        static let maxReconnectDelay = 300.0
+        nonisolated static let checkMountInterval = 10.0 // Interval for checking the mount status and updating the UI.
+        static let mountTimeout = 15.0 // Seconds before a server is considered unreachable and zombie unmount is triggered.
+        
+        enum Reconnection {
+            static let baseDelay = 5.0 // Seconds that we start our reconnection attempts with.
+            static let maxMinutesDelay = 5.0 // Maximum delay between reconnection attempts in minutes.
+            static let maxReconnectAttempts = 5
+            static let initialReconnectDelay = 5.0
+            static let maxReconnectDelay = 300.0
+        }
     }
 }

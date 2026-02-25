@@ -41,8 +41,9 @@ extension SambaMount {
     ///  - host: The hostname or IP address to check.
     ///  - port: The port number to check.
     ///  - timeout: The timeout duration for the connection attempt.
-    ///  - Throws: ConnectionError.portClosed if the port is not accessible.
-    /// Verify the specified port is accessible on the host.
+    ///  - Throws: `ConfigurationError.invalidPort` if the port number is out of range.
+    ///  - Throws: `ConnectionError.portClosed` if the port is not accessible.
+    ///  - Throws: `ConfigurationError.processFailed` if the check process itself fails.
     static func checkPortAccessible(
         host: String,
         port: Int,
@@ -73,9 +74,21 @@ extension SambaMount {
             }
         } catch {
             throw ConfigurationError.processFailed(
-                process: "host",
+                process: "nc",
                 reason: error.localizedDescription
             )
+        }
+    }
+    
+    /// Checks whether the server for a mounted share is still reachable on its configured port.
+    /// - Parameter mountData: The mount data object containing host and port information.
+    /// - Returns: `true` if the server is reachable, `false` otherwise.
+    static func isServerReachable(mountData: MountDataObject) async -> Bool {
+        do {
+            try await checkPortAccessible(host: mountData.host, port: mountData.port)
+            return true
+        } catch {
+            return false
         }
     }
 }

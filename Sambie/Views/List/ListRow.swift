@@ -79,10 +79,16 @@ struct ListRow: View {
             }
         }
         .padding(8)
-        .background(self.setBackgroundColor())
+        .background(
+            ZombieBackground(
+                isZombie: transientState.isZombie,
+                staticBackground: self.setBackgroundColor()
+            )
+        )
         .font(.title2)
         .cornerRadius(6)
         .listRowSeparator(.hidden)
+        // Initialize the mount connection when the view appears:
         .task {
             await self.initialize()
         }

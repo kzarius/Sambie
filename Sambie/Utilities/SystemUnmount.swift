@@ -6,39 +6,33 @@
 //
 
 import Foundation
-import Darwin
+import Subprocess
 
-/// Unmount a volume using Darwin's unmount system call.
+/// Unmount a volume using diskutil.
 /// - Parameters:
 ///   - path: The mount point path to unmount
-///   - forcefully: Whether to force unmount (MNT_FORCE flag)
+///   - forcefully: Whether to force unmount
 /// - Returns: A boolean indicating if the unmount was successful
 func systemUnmount(
     path: String,
     forcefully: Bool = false
-) throws -> Bool {
-    let flags: Int32 = forcefully ? MNT_FORCE : 0
-    
-    let result = Darwin.unmount(path, flags)
-    
-    logger("Unmounting path: \(path) with flags: \(flags), result: \(result)", level: .debug)
-    
-    guard result == 0 else {
-        let errorCode = errno
-        
-        switch errorCode {
-        case EBUSY:
-            throw ClientError.unmountFailed
-        case EINVAL:
-            throw ClientError.notFound
-        case EPERM, EACCES:
-            throw ClientError.permissionDenied
-        case ENOENT:
-            throw ClientError.notFound
-        default:
-            throw ClientError.unknown(code: errorCode, output: String(cString: strerror(errorCode)))
-        }
+) async throws -> Bool {
+    var arguments = ["unmount"]
+    if forcefully { arguments.append("force") }
+    arguments.append(path)
+
+    let result = try await Subprocess.run(
+        .name("diskutil"),
+        arguments: .init(arguments),
+        output: .discarded,
+        error: .discarded
+    )
+
+    logger("Unmounting path: \(path), forcefully: \(forcefully), success: \(result.terminationStatus.isSuccess)", level: .debug)
+
+    guard result.terminationStatus.isSuccess else {
+        throw ClientError.unmountFailed
     }
-    
+
     return true
 }

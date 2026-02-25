@@ -29,6 +29,12 @@ struct ListRowContent: View {
             // Status icon:
             ListStatusIcon(mountID: self.mount.persistentModelID)
             
+            // Zombie indicator -
+            // Shown when mount is connected but server is unreachable:
+            if self.transientState.isZombie, let since = self.transientState.serverUnreachableSince {
+                ZombieIndicator(since: since)
+            }
+            
             // Auto-reconnect indicator:
             AutoReconnectButton(mount: self.mount)
             
@@ -39,5 +45,6 @@ struct ListRowContent: View {
         }
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.default, value: self.transientState.isZombie)
     }
 }

@@ -16,10 +16,10 @@ extension MountMonitor {
         scheduledReconnects[mountID]?.cancel()
         
         // Calculate the delay using exponential backoff:
-        let baseDelay = await Config.Reconnection.baseDelay
+        let baseDelay = await Config.Connection.Reconnection.baseDelay
         let multiplier = pow(2.0, Double(attempt))
         let uncappedDelay = baseDelay * multiplier
-        let maxDelayInSeconds = await Config.Reconnection.maxMinutesDelay * 60.0
+        let maxDelayInSeconds = await Config.Connection.Reconnection.maxMinutesDelay * 60.0
         let delay = min(uncappedDelay, maxDelayInSeconds)
         let nextReconnectAt = Date().addingTimeInterval(delay)
         

@@ -19,6 +19,13 @@ final class MountStateManager {
         var errors: [String] = []
         var reconnectAttempts: Int = 0
         var nextReconnectAt: Date?
+        // Tracks the first time the server was unreachable for this mount:
+        var serverUnreachableSince: Date? = nil
+        // A mount is a zombie if it appears mounted but the server is consistently unreachable.
+        var isZombie: Bool {
+            self.serverUnreachableSince != nil &&
+            self.status == .connected
+        }
     }
     
     private var states: [PersistentIdentifier: MountState] = [:]
@@ -58,6 +65,22 @@ final class MountStateManager {
             self.states[mountID] = MountState()
         }
         self.states[mountID]?.status = status
+    }
+    
+    
+    // MARK: - Unreachable Management
+    /// If the server is unreachable, marks the mount as such and starts tracking how long it's been unreachable.
+    func markServerUnreachable(for mountID: PersistentIdentifier) {
+        if self.states[mountID] == nil { self.states[mountID] = MountState() }
+        // Only set the timestamp once — don't overwrite on subsequent calls:
+        if self.states[mountID]?.serverUnreachableSince == nil {
+            self.states[mountID]?.serverUnreachableSince = Date()
+        }
+    }
+
+    /// Resets the unreachable status for a mount, clearing the timestamp and any zombie state.
+    func clearServerUnreachable(for mountID: PersistentIdentifier) {
+        self.states[mountID]?.serverUnreachableSince = nil
     }
     
     
