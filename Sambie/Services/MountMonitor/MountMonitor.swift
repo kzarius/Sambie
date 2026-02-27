@@ -19,6 +19,7 @@ actor MountMonitor {
     
     // Reconnection scheduling:
     internal var scheduledReconnects: [PersistentIdentifier: Task<Void, Never>] = [:]
+    internal var mountsNeedingZombieUnmount: [PersistentIdentifier] = []
     
     // Network monitoring:
     internal var networkMonitor: NWPathMonitor?

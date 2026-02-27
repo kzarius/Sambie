@@ -26,6 +26,8 @@ final class Mount {
     var autoReconnect: Bool = false
     var wasUnexpectedlyDisconnected: Bool = false // Whether the mount was unexpectedly disconnected. Used to trigger auto-reconnect attempts.
     
+    var lastConnectedAt: Date? = nil // The last time the mount was successfully connected. Used to determine if the server has been unreachable for a long time.
+    
     // Flagged mounts are there as newly added mounts, not quite meant to be saved yet. They are used to show the new mount in the list immediately after creation, before the user has hit "Save" in the editor.
     @Transient var isTemporary: Bool = false
     

@@ -22,6 +22,7 @@ final class MountStateManager {
         // Tracks the first time the server was unreachable for this mount:
         var serverUnreachableSince: Date? = nil
         // A mount is a zombie if it appears mounted but the server is consistently unreachable.
+        var isForceUnmounting: Bool = false
         var isZombie: Bool {
             self.serverUnreachableSince != nil &&
             self.status == .connected
@@ -65,6 +66,12 @@ final class MountStateManager {
             self.states[mountID] = MountState()
         }
         self.states[mountID]?.status = status
+    }
+    
+    /// Sets whether the mount is currently being force-unmounted due to server unreachability.
+    func setForceUnmounting(_ value: Bool, for mountID: PersistentIdentifier) {
+        if states[mountID] == nil { states[mountID] = MountState() }
+        states[mountID]?.isForceUnmounting = value
     }
     
     

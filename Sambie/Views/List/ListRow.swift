@@ -98,11 +98,19 @@ struct ListRow: View {
     // MARK: - Methods
     private func handleMountToggle() async {
         switch self.stateManager.getState(for: self.mount.persistentModelID).status {
+            
+        // Disconnect:
         case .connected:
             self.mount.autoReconnect = false
             await self.mountConnection?.unmount()
+            
+        // Connect:
         case .disconnected:
             await self.mountConnection?.mount()
+            
+        // Cancel:
+        case .connecting:
+            await self.mountConnection?.cancel()
         default:
             break
         }

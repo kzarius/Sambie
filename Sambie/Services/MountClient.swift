@@ -18,6 +18,7 @@ actor MountClient: Sendable {
     private let mountID: PersistentIdentifier
     private let accessor: MountAccessor
     private let stateManager: MountStateManager
+    private var cancelled = false
     
     
     // MARK: - Initializer
@@ -39,14 +40,26 @@ actor MountClient: Sendable {
     /// Attempt to mount a samba drive to a directory.
     /// - Note: This function updates the mount's state as it progresses.
     func mount() async {
+        self.cancelled = false
         await self.updateState(status: .connecting)
         do {
             try await self.doMount()
-            await self.updateState(status: .connected)
         } catch {
+            guard !self.cancelled else { return }
             let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
             await self.updateState(status: status, errors: [error])
+            return
         }
+        
+        // If cancelled while NetFS was running, undo the mount:
+        if self.cancelled {
+            await logger("Mount cancelled — reversing", level: .debug)
+            try? await self.doUnmount()
+            return
+        }
+
+        await self.updateState(status: .connected)
+        try? await self.accessor.markLastConnected(self.mountID)
     }
     
     func unmount() async {
@@ -58,6 +71,12 @@ actor MountClient: Sendable {
             let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
             await self.updateState(status: status, errors: [error])
         }
+    }
+    
+    /// This function will cancel any active mount/unmount task to prevent conflicts, and then update the state based on whether the mount is still present and mounted.
+    func cancel() async {
+        self.cancelled = true
+        await self.updateState(status: .disconnected)
     }
     
     /// Attempt to mount the directory.
@@ -152,6 +171,8 @@ actor MountClient: Sendable {
     /// Skips gentle unmount and goes straight to force unmount.
     /// Used when the server is suspected unreachable (zombie mount).
     func forceUnmountZombie() async {
+        // Set a flag to indicate we're in the process of force unmounting:
+        await self.stateManager.setForceUnmounting(true, for: self.mountID)
         await self.updateState(status: .disconnecting)
         do {
             await logger("Attempting to force unmount suspected zombie mount with ID \(self.mountID)", level: .warning)
@@ -178,6 +199,8 @@ actor MountClient: Sendable {
             let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
             await self.updateState(status: status, errors: [error])
         }
+        
+        await self.stateManager.setForceUnmounting(false, for: self.mountID)
     }
     
     

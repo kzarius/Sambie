@@ -39,7 +39,10 @@ extension MountMonitor {
             }
             
             let state = await self.stateManager.getState(for: mountID)
-            guard state.status == .disconnected else { continue }
+            guard state.status == .disconnected, !state.isForceUnmounting else {
+                await logger("⚡ [network restore] skipping \(mountID) — status=\(state.status) isForceUnmounting=\(state.isForceUnmounting)", level: .debug)
+                continue
+            }
             
             await self.resetBackoff(for: mountID)
             await self.scheduleReconnect(for: mountID, attempt: 0)

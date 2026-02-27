@@ -31,7 +31,8 @@ extension MountMonitor {
     
     /// Reset the backoff timer for a mount.
     func resetBackoff(for mountID: PersistentIdentifier) async {
-        scheduledReconnects[mountID]?.cancel()
+        await logger("⚠️ resetBackoff called for \(mountID)", level: .warning)
+        self.scheduledReconnects[mountID]?.cancel()
         await stateManager.resetReconnectAttempts(for: mountID)
     }
     
@@ -46,10 +47,14 @@ extension MountMonitor {
         for mountID in mountIDs {
             let state = await self.stateManager.getState(for: mountID)
             
-            // Only attempt reconnect if we're past the scheduled time and currently disconnected:
+            // Only attempt reconnect if we're past the scheduled time and currently disconnected, and we're not force-unmounting:
             guard let nextReconnectAt = state.nextReconnectAt,
                   nextReconnectAt <= now,
-                  state.status == .disconnected else {
+                  state.status == .disconnected,
+                  !state.isForceUnmounting else {
+                if state.nextReconnectAt != nil {
+                    await logger("⏱ [processScheduledReconnects] skipping \(mountID) — status=\(state.status) isForceUnmounting=\(state.isForceUnmounting) nextReconnectAt=\(String(describing: state.nextReconnectAt))", level: .debug)
+                }
                 continue
             }
             
@@ -79,6 +84,7 @@ extension MountMonitor {
 
     /// Immediately attempts to reconnect all auto-reconnect mounts that are disconnected at startup.
     internal func scheduleStartupReconnect(for mountID: PersistentIdentifier) async {
+        
         // Check for mounts that should be auto-reconnected on startup:
         guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect else {
@@ -86,20 +92,18 @@ extension MountMonitor {
         }
 
         await logger("Startup reconnect triggered for \(mountData.name)", level: .info)
-        await self.stateManager.setStatus(.connecting, for: mountID)
 
         // Perform the mount attempt:
-        Task {
-            await MountClient(
-                mountID: mountID,
-                accessor: self.accessor,
-                stateManager: self.stateManager
-            ).mount()
+        let client = await MountClient(
+            mountID: mountID,
+            accessor: self.accessor,
+            stateManager: self.stateManager
+        )
+        await client.mount()
 
-            let newState = await self.stateManager.getState(for: mountID)
-            if newState.status == .disconnected {
-                await self.scheduleReconnect(for: mountID, attempt: 1)
-            }
+        let newState = await self.stateManager.getState(for: mountID)
+        if newState.status == .disconnected {
+            await self.scheduleReconnect(for: mountID, attempt: 1)
         }
     }
 }

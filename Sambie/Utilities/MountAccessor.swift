@@ -78,6 +78,15 @@ actor MountAccessor {
         return mount
     }
     
+    /// Marks the last time a mount was successfully connected.
+    func markLastConnected(_ mountID: PersistentIdentifier) throws {
+        guard let mount = self.getMount(id: mountID) else {
+            throw ClientError.notFound
+        }
+        mount.lastConnectedAt = Date()
+        try self.save()
+    }
+    
     // MARK: - Reconnect Accessors
     /// Marks a mount as unexpectedly disconnected, which will trigger the reconnect logic in the UI.
     func markUnexpectedDisconnect(_ mountID: PersistentIdentifier) throws {
