@@ -60,7 +60,7 @@ extension MountMonitor {
             
             // Check if auto-reconnect is still enabled before attempting:
             guard let mountData = await self.accessor.getData(id: mountID),
-                  mountData.autoReconnect else {
+                  mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else {
                 continue
             }
             
@@ -87,23 +87,12 @@ extension MountMonitor {
         
         // Check for mounts that should be auto-reconnected on startup:
         guard let mountData = await self.accessor.getData(id: mountID),
-              mountData.autoReconnect else {
+              mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else {
             return
         }
-
-        await logger("Startup reconnect triggered for \(mountData.name)", level: .info)
-
-        // Perform the mount attempt:
-        let client = await MountClient(
-            mountID: mountID,
-            accessor: self.accessor,
-            stateManager: self.stateManager
-        )
-        await client.mount()
-
-        let newState = await self.stateManager.getState(for: mountID)
-        if newState.status == .disconnected {
-            await self.scheduleReconnect(for: mountID, attempt: 1)
-        }
+        
+        await logger("Startup reconnect scheduled for \(mountData.name)", level: .info)
+        // Set nextReconnectAt to now so processScheduledReconnects picks it up immediately:
+        await stateManager.setReconnectAttempt(0, nextAt: Date(), for: mountID)
     }
 }

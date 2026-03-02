@@ -24,10 +24,11 @@ extension MountMonitor {
     /// Processes network path updates from NWPathMonitor.
     /// Resets reconnection backoff for auto-reconnect mounts when network connectivity is restored.
     private func processNetworkPathUpdate(path: NWPath) async {
-        let wasAvailable = isNetworkAvailable
-        isNetworkAvailable = path.status == .satisfied
+        let wasAvailable = self.isNetworkAvailable
+        self.isNetworkAvailable = path.status == .satisfied
+        self.currentNetworkPath = path
         
-        guard !wasAvailable && isNetworkAvailable else { return }
+        guard !wasAvailable && self.isNetworkAvailable else { return }
         
         await logger("Network restored, resetting backoff for auto-reconnect mounts", level: .info)
         
@@ -45,7 +46,10 @@ extension MountMonitor {
             }
             
             await self.resetBackoff(for: mountID)
-            await self.scheduleReconnect(for: mountID, attempt: 0)
+            await self.stateManager.setReconnectAttempt(0, nextAt: Date(), for: mountID)
         }
+        
+        // Immediately attempt reconnects rather than waiting for the next timer tick:
+        Task { await self.processScheduledReconnects() }
     }
 }

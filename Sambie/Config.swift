@@ -92,6 +92,9 @@ enum Config: Sendable {
             static let maxReconnectAttempts = 5
             static let initialReconnectDelay = 5.0
             static let maxReconnectDelay = 300.0
+            static let allowUntrustedWifi = true
+            static let allowOverCellular = true
+            static let allowOnLowDataMode = true
         }
     }
 }

@@ -24,6 +24,7 @@ actor MountMonitor {
     // Network monitoring:
     internal var networkMonitor: NWPathMonitor?
     internal var isNetworkAvailable = true
+    internal var currentNetworkPath: NWPath? = nil
     
     
     // MARK: - Initializer
@@ -35,8 +36,12 @@ actor MountMonitor {
         self.stateManager = stateManager
         
         // Initialize all mount states in parallel:
-        await self.initializeAllStatuses()
         await self.startNetworkMonitoring()
+        try? await Task.sleep(for: .milliseconds(300))
+        await self.initializeAllStatuses()
+        
+        // Fire an immediate reconnect pass in the background without blocking init:
+        Task { await self.processScheduledReconnects() }
     }
     
     deinit {

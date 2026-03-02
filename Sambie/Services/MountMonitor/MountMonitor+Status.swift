@@ -131,9 +131,9 @@ extension MountMonitor {
         // Mark the mount as unexpectedly disconnected to trigger the reconnect UI:
         try? await self.accessor.markUnexpectedDisconnect(mountID)
         
-        // Check if auto-reconnect is enabled:
+        // Check if auto-reconnect is enabled, and that we're on a trusted network:
         guard let mountData = await self.accessor.getData(id: mountID),
-              mountData.autoReconnect else { return }
+              mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
 
         await logger("Unexpected disconnect for \(mountData.name) — scheduling reconnect", level: .info)
         // Reset reconnect attempts and schedule a reconnect:
@@ -160,6 +160,7 @@ extension MountMonitor {
 
     /// Force unmounts a zombie mount and schedules a reconnect if auto-reconnect is enabled.
     private func runZombieUnmount(for mountID: PersistentIdentifier) async {
+        // Force unmount it:
         let client = await MountClient(
             mountID: mountID,
             accessor: self.accessor,
@@ -169,8 +170,9 @@ extension MountMonitor {
 
         await self.stateManager.clearServerUnreachable(for: mountID)
 
+        // Check if auto-reconnect is enabled and we're on a trusted network before scheduling a reconnect:
         guard let mountData = await self.accessor.getData(id: mountID),
-              mountData.autoReconnect else { return }
+              mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
 
         await logger("🧟 Zombie unmount complete for \(mountData.name) — scheduling reconnect", level: .info)
         await self.stateManager.resetReconnectAttempts(for: mountID)
