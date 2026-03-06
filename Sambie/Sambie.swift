@@ -91,6 +91,13 @@ struct Sambie: App {
                 .environment(self.mountStateManager)
                 .environment(\.mountAccessor, mountAccessor)
         }
+        
+        // Settings window:
+        Window("Settings", id: "settings-window") {
+            SettingsView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 400, height: 300)
     }
     
     /// Function to clear previous store during development.

@@ -31,6 +31,14 @@ struct MenuBar: View {
                 label: { Text("Show Mounts") }
             )
             
+            // Settings window:
+            Button(
+                action: { self.openWindow(id: "settings-window") },
+                label: { Text("Settings") }
+            )
+            
+            Divider()
+            
             // Quit:
             Button("Quit") { NSApplication.shared.terminate(nil) }
         }
