@@ -27,13 +27,13 @@ struct MenuBar: View {
             
             // Mount main window:
             Button(
-                action: { self.openWindow(id: "mounts-window") },
+                action: { self.openAndFocus(id: "mounts-window") },
                 label: { Text("Show Mounts") }
             )
             
             // Settings window:
             Button(
-                action: { self.openWindow(id: "settings-window") },
+                action: { self.openAndFocus(id: "settings-window") },
                 label: { Text("Settings") }
             )
             
@@ -41,6 +41,16 @@ struct MenuBar: View {
             
             // Quit:
             Button("Quit") { NSApplication.shared.terminate(nil) }
+        }
+    }
+    
+    // MARK: - Methods
+    /// Opens a window by ID and brings Sambie to the foreground.
+    private func openAndFocus(id: String) {
+        self.openWindow(id: id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.forEach { $0.orderFrontRegardless() }
         }
     }
 }
