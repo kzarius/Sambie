@@ -19,33 +19,42 @@ struct SettingsView: View {
 
     // MARK: - View
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            self.reconnectionBlock
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 26) {
+                self.reconnectionBlock
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(width: 480, height: 480)
     }
 
 
     // MARK: - Blocks
     private var reconnectionBlock: some View {
-        EditorFormBlock(label: "Auto-Reconnect", icon: "arrow.trianglehead.2.clockwise") {
+        SettingsFormBlock(label: "Auto-Reconnect", icon: "arrow.trianglehead.2.clockwise") {
             VStack(alignment: .leading, spacing: 12) {
 
                 // Spacer between block title and first option:
                 Spacer().frame(height: 4)
 
                 SettingsToggleRow(
-                    title: "Always Trust Ethernet",
-                    description: "Always reconnect when on a wired ethernet connection, ignoring all other checks.",
+                    title: "Trust Ethernet Networks",
+                    description: (
+                        on:  "Always reconnecting over wired Ethernet, ignoring all other checks.",
+                        off: "Ethernet connections are subject to the same checks as other network types."
+                    ),
                     isOn: self.$alwaysTrustEthernet
                 )
 
                 Divider()
 
                 SettingsToggleRow(
-                    title: "Allow over Hotspot",
-                    description: "Reconnect when tethered to an iPhone or Android mobile hotspot.",
+                    title: "Allow over Hotspots",
+                    description: (
+                        on:  "Reconnecting when tethered to a mobile hotspot.",
+                        off: "Hotspot connections will be skipped."
+                    ),
                     isOn: self.$allowOverHotspot
                 )
 
@@ -53,7 +62,10 @@ struct SettingsView: View {
 
                 SettingsToggleRow(
                     title: "Allow on Low Data Mode",
-                    description: "Reconnect even when Low Data Mode is active.",
+                    description: (
+                        on:  "Reconnecting even on networks with Low Data Mode enabled.",
+                        off: "Networks marked as Low Data Mode will be skipped."
+                    ),
                     isOn: self.$allowOnLowDataMode
                 )
 
@@ -61,18 +73,25 @@ struct SettingsView: View {
 
                 SettingsToggleRow(
                     title: "Allow over VPN",
-                    description: "Reconnect when an active VPN connection is detected.",
+                    description: (
+                        on:  "Reconnecting when an active VPN is detected.",
+                        off: "No reconnection attempts will be made while a VPN is active."
+                    ),
                     isOn: self.$allowOnVPN
                 )
 
                 Divider()
 
                 SettingsToggleRow(
-                    title: "Only Reconnect on Secure WiFi",
-                    description: "Only reconnect on password-protected WiFi networks (WPA2/WPA3). Open networks will be skipped.",
+                    title: "Secure WiFi Only",
+                    description: (
+                        on:  "Only reconnecting on password-protected networks (WPA2/WPA3).",
+                        off: "Reconnecting on any available WiFi network, including open ones."
+                    ),
                     isOn: self.$trustSecureWifi
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

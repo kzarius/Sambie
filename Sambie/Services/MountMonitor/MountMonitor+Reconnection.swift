@@ -26,12 +26,12 @@ extension MountMonitor {
         // Schedule the reconnect attempt:
         await stateManager.setReconnectAttempt(attempt, nextAt: nextReconnectAt, for: mountID)
         
-        await logger("Scheduled reconnect for mount \(mountID) in \(delay)s (attempt \(attempt))", level: .debug)
+        await logger("Scheduled reconnect for mount in \(delay)s (attempt \(attempt))", level: .debug)
     }
     
     /// Reset the backoff timer for a mount.
     func resetBackoff(for mountID: PersistentIdentifier) async {
-        await logger("⚠️ resetBackoff called for \(mountID)", level: .warning)
+        await logger("⚠️ resetBackoff called for a mount", level: .warning)
         self.scheduledReconnects[mountID]?.cancel()
         await stateManager.resetReconnectAttempts(for: mountID)
     }
@@ -53,7 +53,7 @@ extension MountMonitor {
                   state.status == .disconnected,
                   !state.isForceUnmounting else {
                 if state.nextReconnectAt != nil {
-                    await logger("⏱ [processScheduledReconnects] skipping \(mountID) — status=\(state.status) isForceUnmounting=\(state.isForceUnmounting) nextReconnectAt=\(String(describing: state.nextReconnectAt))", level: .debug)
+                    await logger("⏱ [processScheduledReconnects] skipping a mount — status=\(state.status) isForceUnmounting=\(state.isForceUnmounting) nextReconnectAt=\(String(describing: state.nextReconnectAt))", level: .debug)
                 }
                 continue
             }

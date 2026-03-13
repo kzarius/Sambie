@@ -37,7 +37,15 @@ struct Sambie: App {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
             return container
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // If the store is incompatible (e.g. after a schema change), delete it and retry.
+            let storeURL = modelConfiguration.url
+            try? FileManager.default.removeItem(at: storeURL)
+            do {
+                let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+                return container
+            } catch {
+                fatalError("Could not create ModelContainer after clearing store: \(error)")
+            }
         }
     }()
     
@@ -51,34 +59,24 @@ struct Sambie: App {
     
     // MARK: - Body
     var body: some Scene {
+        
         // Main window:
         Window("Mounts", id: "mounts-window") {
             WindowView()
-                .overlay {
-                    if !self.isInitialized {
-                        // Show a loading indicator while initializing:
-                        ProgressView("Loading mounts...")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.windowBackgroundColor).opacity(0.8))
-                            .task {
-                                // Monitor the mounts:
-                                self.mountMonitor = await MountMonitor(
-                                    accessor: self.mountAccessor,
-                                    stateManager: self.mountStateManager
-                                )
-                                await self.mountMonitor?.startMonitoring()
-                                self.isInitialized = true
-                            }
-                    }
-                }
+                .overlay { self.loadingOverlay }
                 .environment(self.mountStateManager)
                 .environment(\.mountAccessor, mountAccessor)
                 .modelContainer(self.sharedModelContainer)
+        }
+        .windowResizability(.contentSize)
+        .commands {
+            AppCommands()
         }
         
         // Menu bar:
         MenuBarExtra() {
             if self.isInitialized {
+                
                 MenuBar()
                     .environment(self.mountStateManager)
                     .environment(\.mountAccessor, mountAccessor)
@@ -87,6 +85,7 @@ struct Sambie: App {
                 ProgressView("Loading...")
             }
         } label: {
+            
             MenuBarIcon()
                 .environment(self.mountStateManager)
                 .environment(\.mountAccessor, mountAccessor)
@@ -100,6 +99,27 @@ struct Sambie: App {
         .defaultSize(width: 400, height: 300)
     }
     
+    
+    // MARK: - Helpers
+    @ViewBuilder
+    private var loadingOverlay: some View {
+        if !self.isInitialized {
+            ProgressView("Loading mounts...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.windowBackgroundColor).opacity(0.8))
+                .task {
+                    self.mountMonitor = await MountMonitor(
+                        accessor: self.mountAccessor,
+                        stateManager: self.mountStateManager
+                    )
+                    await self.mountMonitor?.startMonitoring()
+                    self.isInitialized = true
+                }
+        }
+    }
+    
+    
+    // MARK: - Store Management
     /// Function to clear previous store during development.
     private static func clearPreviousStore() throws {
         let schema = Schema([Mount.self])

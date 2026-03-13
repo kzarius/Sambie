@@ -17,7 +17,6 @@ struct WindowView: View {
     // MARK: - View
     var body: some View {
         ListView(editorState: self.$editorState)
-        .frame(minWidth: 200)
         // Open the editor sheet when it's state is not closed:
         .sheet(isPresented: Binding(
             get: { self.editorState != .closed },

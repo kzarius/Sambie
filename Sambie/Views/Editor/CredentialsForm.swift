@@ -30,7 +30,6 @@ struct CredentialsForm: View {
                     
                     LabeledInputField(label: "Password") {
                         SecureField("", text: self.$password)
-                            .modifier(LargeTextFieldStyle())
                     }
                     
                     LabeledInputField(label: "Host") {

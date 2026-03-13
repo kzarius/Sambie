@@ -7,24 +7,49 @@
 
 import SwiftUI
 
+/// Describes the on and off states of a settings toggle.
+struct ToggleDescription {
+    let on: String
+    let off: String
+}
+
 /// A reusable row view for settings that includes a toggle and descriptive text.
 struct SettingsToggleRow: View {
     let title: String
-    let description: String
+    let description: ToggleDescription
     @Binding var isOn: Bool
 
+    // Convenience: call with `description: (on: "…", off: "…")`
+    init(title: String, description: (on: String, off: String), isOn: Binding<Bool>) {
+        self.title = title
+        self.description = ToggleDescription(on: description.on, off: description.off)
+        self._isOn = isOn
+    }
+
+    // Original synthesized initializer kept explicitly
+    init(title: String, description: ToggleDescription, isOn: Binding<Bool>) {
+        self.title = title
+        self.description = description
+        self._isOn = isOn
+    }
+
+    private var currentDescription: String { isOn ? description.on : description.off }
+
     var body: some View {
-        Toggle(isOn: $isOn) {
+        HStack(alignment: .center, spacing: 12) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: Config.UI.Colors.utility))
+                .fixedSize(horizontal: true, vertical: false)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                Text(description)
+
+                Text(currentDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
             }
-            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 8)
         }
         .padding(.vertical, 4)
     }

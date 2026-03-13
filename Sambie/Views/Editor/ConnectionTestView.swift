@@ -96,6 +96,10 @@ struct ConnectionTestView: View {
             
             // No errors will produce this:
             self.results = ""
+            
+            //vvvvvvvv REMOVE AFTER TESTING:
+            // Step 3: Attempt to list shares (full connection test):
+            logger("Mounts found @\(self.host): \(try await SambaMount.listShares(at: self.host, username: self.username))")
         } catch {
             self.results = error.localizedDescription
         }

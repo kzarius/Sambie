@@ -53,13 +53,36 @@ struct SambaURL {
     /// - Parameter mount: The mount object containing the host, share, and user.
     /// - Returns: A formatted Samba URL string.
     static func create(from mountData: MountDataObject) -> URL {
+        let baseURL = create(host: mountData.host, username: mountData.user, password: nil)
+
+        // Preserve user/password/host from baseURL and set the share as the path:
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        components?.path = "/" + mountData.share
+
+        return components?.url ?? URL(fileURLWithPath: "")
+    }
+    
+    /// Creates a Samba URL from individual components.
+    /// - Parameters:
+    ///   - host: The hostname or IP address of the server.
+    ///   - username: Optional username for authenticated access.
+    ///   - password: Optional password for authenticated access.
+    /// - Returns: A formatted Samba URL.
+    static func create(
+        host: String,
+        username: String? = nil,
+        password: String? = nil
+    ) -> URL {
         var components = URLComponents()
         components.scheme = "smb"
-        components.host = mountData.host
-        components.path = "/" + mountData.share
+        components.host = host
 
-        if !mountData.user.isEmpty {
-            components.user = mountData.user
+        if let user = username, !user.isEmpty {
+            components.user = user
+        }
+
+        if let pass = password, !pass.isEmpty {
+            components.password = pass
         }
 
         return components.url ?? URL(fileURLWithPath: "")
