@@ -51,6 +51,7 @@ actor MountMonitor {
     
     
     // MARK: - Public Methods
+    /// Starts the monitoring loop that periodically checks the status of all mounts and processes scheduled reconnects.
     func startMonitoring() async {
         guard self.monitoringTask == nil else { return }
         
@@ -62,5 +63,17 @@ actor MountMonitor {
                 await self.processScheduledReconnects()
             }
         }
+    }
+    
+    /// Stops the monitoring loop.
+    func cleanupMount(id mountID: PersistentIdentifier) async {
+        // Cancel any pending reconnect task for this mount:
+        scheduledReconnects[mountID]?.cancel()
+        scheduledReconnects.removeValue(forKey: mountID)
+        
+        // Clear its state:
+        await stateManager.clearErrors(for: mountID)
+        await stateManager.clearServerUnreachable(for: mountID)
+        await stateManager.resetReconnectAttempts(for: mountID)
     }
 }

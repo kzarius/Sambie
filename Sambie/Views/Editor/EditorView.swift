@@ -15,6 +15,7 @@ struct EditorView: View {
     // MARK: - Properties
     @Environment(\.mountAccessor) private var accessor
     @Environment(MountStateManager.self) private var stateManager
+    @Environment(\.mountMonitor) private var monitor
     @Environment(\.modelContext) private var modelContext
     
     @Binding var state: EditorState
@@ -39,7 +40,7 @@ struct EditorView: View {
     
     // MARK: - Private Methods
     private func loadActions() {
-        guard let accessor = self.accessor else { return }
+        guard let accessor = self.accessor, let monitor = self.monitor else { return }
         
         Task {
             // Editor states:
@@ -50,6 +51,7 @@ struct EditorView: View {
                 self.actions = await EditorActions.forNewMount(
                     accessor: accessor,
                     stateManager: self.stateManager,
+                    monitor: monitor,
                     modelContext: self.modelContext,
                     onDismiss: { self.state = .closed }
                 )
@@ -60,6 +62,7 @@ struct EditorView: View {
                     mountID: id,
                     accessor: accessor,
                     stateManager: self.stateManager,
+                    monitor: monitor,
                     modelContext: self.modelContext,
                     onDismiss: { self.state = .closed }
                 )

@@ -36,14 +36,15 @@ struct ListView: View {
             // Row to "Add a new mount":
             AddMountRow(editorState: self.$editorState)
         }
+        // Track the content height of the list to adjust the frame height dynamically:
         .onScrollGeometryChange(for: CGFloat.self) { geo in
             geo.contentSize.height
         } action: { _, newHeight in
             contentHeight = newHeight
         }
-        .frame(height: min(contentHeight, 520))
-        .onAppear {
-            logger("ListView appeared with \(self.savedMounts.count) mounts.")
+        // Trigger a recalculation on change:
+        .onChange(of: self.savedMounts.count) {
+            contentHeight = 0
         }
         .navigationTitle("Mounts")
         .listStyle(.plain)

@@ -66,6 +66,7 @@ struct Sambie: App {
                 .overlay { self.loadingOverlay }
                 .environment(self.mountStateManager)
                 .environment(\.mountAccessor, mountAccessor)
+                .environment(\.mountMonitor, mountMonitor)
                 .modelContainer(self.sharedModelContainer)
         }
         .windowResizability(.contentSize)

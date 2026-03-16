@@ -26,6 +26,7 @@ final class EditorActions {
     // Private:
     private let accessor: MountAccessor
     private let stateManager: MountStateManager
+    private let monitor: MountMonitor
     private let modelContext: ModelContext
     private var mount: Mount?
     private let onDismiss: () -> Void
@@ -45,11 +46,13 @@ final class EditorActions {
     private init(
         accessor: MountAccessor,
         stateManager: MountStateManager,
+        monitor: MountMonitor,
         modelContext: ModelContext,
         onDismiss: @escaping () -> Void
     ) {
         self.accessor = accessor
         self.stateManager = stateManager
+        self.monitor = monitor
         self.modelContext = modelContext
         self.onDismiss = onDismiss
     }
@@ -58,12 +61,14 @@ final class EditorActions {
     static func forNewMount(
         accessor: MountAccessor,
         stateManager: MountStateManager,
+        monitor: MountMonitor,
         modelContext: ModelContext,
         onDismiss: @escaping () -> Void
     ) async -> EditorActions {
         let actions = EditorActions(
             accessor: accessor,
             stateManager: stateManager,
+            monitor: monitor,
             modelContext: modelContext,
             onDismiss: onDismiss
         )
@@ -85,6 +90,7 @@ final class EditorActions {
         mountID: PersistentIdentifier,
         accessor: MountAccessor,
         stateManager: MountStateManager,
+        monitor: MountMonitor,
         modelContext: ModelContext,
         onDismiss: @escaping () -> Void
     ) async -> EditorActions? {
@@ -95,6 +101,7 @@ final class EditorActions {
         let actions = EditorActions(
             accessor: accessor,
             stateManager: stateManager,
+            monitor: monitor,
             modelContext: modelContext,
             onDismiss: onDismiss
         )
@@ -148,6 +155,11 @@ final class EditorActions {
     func deleteMount() throws {
         guard let mount = self.mount else { return }
         
+        // Clean up any existing mount state before deleting:
+        Task {
+            await self.monitor.cleanupMount(id: mount.persistentModelID)
+        }
+        
         try self.deletePasswordFromKeychain()
         self.modelContext.delete(mount)
         try self.modelContext.save()
@@ -163,6 +175,7 @@ final class EditorActions {
             stateManager: self.stateManager
         )
         await client.unmount()
+        await self.monitor.cleanupMount(id: mount.persistentModelID)
         try self.deleteMount()
     }
     

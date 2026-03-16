@@ -30,20 +30,30 @@ actor MountAccessor {
     }
  
     /// Checks if a mount exists by its ID.
+    /// Does so by attempting to fetch a count of mounts with the given PersistentIdentifier instead of fetching the full model, to avoid issues with invalidated models.
     /// - Parameter mountID: The PersistentIdentifier of the mount to check.
     /// - Returns: True if the mount exists, false otherwise.
     func exists(id mountID: PersistentIdentifier) async -> Bool {
-        return ((self.getMount(id: mountID)) != nil)
+        let internalID = mountID
+        let descriptor = FetchDescriptor<Mount>(
+            predicate: #Predicate { $0.persistentModelID == internalID }
+        )
+        return (try? self.modelContext.fetchCount(descriptor) > 0) ?? false
     }
     
     // MARK: - Data Accessors
     /// Returns an array of tuples with the most important mount data.
     func getData(id mountID: PersistentIdentifier) async -> MountDataObject? {
+        // Use exists check first to avoid accessing invalidated models:
+        guard await self.exists(id: mountID) else { return nil }
+        
+        // Fetch the mount. If it doesn't exist, return nil:
         guard let mount = self.getMount(id: mountID) else {
             Task { await logger("Attempted to get data for a mount that could not be found.", level: .debug) }
             return nil
         }
         var mountData = await mount.toDataObject()
+        
         // Check if the mount is new:
         mountData.isNew = mount.isNew(in: self.modelContext)
         return mountData
