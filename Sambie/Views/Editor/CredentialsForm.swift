@@ -33,11 +33,21 @@ struct CredentialsForm: View {
                     }
                     
                     LabeledInputField(label: "Host") {
-                        TextField("", text: $formData.host)
+                        HostField(
+                            host: $formData.host,
+                            share: $formData.wrappedValue.share,
+                            username: $formData.wrappedValue.user,
+                            password: self.password
+                        )
                     }
                     
                     LabeledInputField(label: "Share") {
-                        TextField("", text: $formData.share)
+                        SharePickerField(
+                            share: $formData.share,
+                            host: $formData.wrappedValue.host,
+                            username: $formData.wrappedValue.user,
+                            password: self.password
+                        )
                     }
                 }
             }

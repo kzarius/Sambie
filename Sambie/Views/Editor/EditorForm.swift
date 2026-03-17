@@ -15,7 +15,6 @@ struct EditorForm: View {
     // MARK: - Properties
     // Bound variables:
     @Bindable var actions: EditorActions
-    @State private var showConnectionTest: Bool = false
     
     // Constants for layout:
     private let cornerRadius: CGFloat = Config.UI.Layout.borderCornerRadius
@@ -36,25 +35,6 @@ struct EditorForm: View {
                 
                 // Default blocks that will always need rendering:
                 self.standardBlocksView
-                
-                // Connection test results:
-                if self.showConnectionTest, let formData = self.actions.formData {
-                    VStack {
-                        ConnectionTestView(
-                            host: formData.host,
-                            share: formData.share,
-                            username: formData.user,
-                            trigger: self.actions.doConnectionTest
-                        )
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            // When we're testing the connection, show the view:
-            .onChange(of: self.actions.doConnectionTest) { _, newValue in
-                if newValue {
-                    self.showConnectionTest = true
-                }
             }
         }
         .padding(20)

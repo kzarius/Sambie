@@ -17,10 +17,6 @@ struct EditorToolbar: ToolbarContent {
     
     // MARK: - Body
     var body: some ToolbarContent {
-        ToolbarItemGroup{
-            self.testConnectionButton()
-        }
-            
         ToolbarItemGroup {
             
             // 1.) The cancel button:
@@ -132,17 +128,6 @@ struct EditorToolbar: ToolbarContent {
         ) {
             self.actions.cancelEditing()
             self.actions.validationErrors.removeAll()
-        }
-    }
-
-    /// Button to test the connection to the mount.
-    private func testConnectionButton() -> some View {
-        ToolbarButton(
-            title: "Test Connection",
-            color: Config.UI.Colors.secondary,
-            validationErrors: self.$actions.validationErrors
-        ) {
-            self.actions.triggerConnectionTest()
         }
     }
 }

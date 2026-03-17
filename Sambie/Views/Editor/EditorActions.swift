@@ -19,7 +19,6 @@ final class EditorActions {
     // Published:
     var formData: MountDataObject?
     var password: String = ""
-    var doConnectionTest: Bool = false
     var validationErrors: [Error] = []
     var sambaURL: String = ""
     
@@ -186,20 +185,6 @@ final class EditorActions {
             self.modelContext.delete(mount)
         }
         self.onDismiss()
-    }
-    
-    func triggerConnectionTest() {
-        do {
-            try self.validateMount()
-            self.doConnectionTest = true
-            
-            Task {
-                try? await Task.sleep(for: .seconds(3))
-                self.doConnectionTest = false
-            }
-        } catch {
-            self.validationErrors.append(error)
-        }
     }
     
     func updateSambaURL() {
