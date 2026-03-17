@@ -20,6 +20,8 @@ struct ListRow: View {
     @Binding var editorState: EditorState
     // Connection to the mount:
     @State private var mountConnection: MountClient?
+    // The actual mount point URL once connected (used for the "Open in Finder" button):
+    @State private var mountPoint: URL? = nil
     
     // Helper to read the current transient state for this mount:
     private var transientState: MountStateManager.MountState {
@@ -44,15 +46,19 @@ struct ListRow: View {
                     // Content of the mount entry:
                     ListRowContent(mount: self.mount)
                     
-                    // Open in Finder button:
-                    if self.transientState.status == .connected {
-                        //                        OpenInFinderButton(mountPoint: self.mount.actualMountPoint)
+                    HStack(spacing: 8) {
+                        
+                        // Open in Finder button:
+                        if self.transientState.status == .connected {
+                            OpenInFinderButton(mountPoint: self.mountPoint)
+                        }
+                        
+                        // Edit button:
+                        EditMountButton {
+                            self.editMount()
+                        }
                     }
-                    
-                    // Edit button:
-                    EditMountButton {
-                        self.editMount()
-                    }
+                    .padding(.trailing, 8)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -91,6 +97,10 @@ struct ListRow: View {
         // Initialize the mount connection when the view appears:
         .task {
             await self.initialize()
+        }
+        // Fetch the mount point whenever the connection status changes:
+        .onChange(of: self.transientState.status) {
+            Task { await self.fetchMountPoint() }
         }
     }
 
@@ -134,6 +144,26 @@ struct ListRow: View {
     private func editMount() {
         // Create the data object for the editor from the live model
         self.editorState = .editing(self.mount.persistentModelID)
+    }
+    
+    /// Fetches the mount point for the current mount if it is connected.
+    private func fetchMountPoint() async {
+        // Only attempt to fetch the mount point if we're currently connected:
+        guard self.transientState.status == .connected else {
+            self.mountPoint = nil
+            return
+        }
+        
+        // Fetch the mount path from the SambaMount utility:
+        if let path = try? await SambaMount.getMountPath(
+            user: self.mount.user,
+            host: self.mount.host,
+            share: self.mount.share
+        ) {
+            self.mountPoint = URL(filePath: path)
+        } else {
+            self.mountPoint = nil
+        }
     }
     
     /// Creates a MountClient instance with the current mount and makes it available.

@@ -48,7 +48,7 @@ struct ListView: View {
         }
         .navigationTitle("Mounts")
         .listStyle(.plain)
-        .frame(width: 520)
+        .frame(width: 620)
         .frame(height: min(contentHeight, 520))
     }
     
