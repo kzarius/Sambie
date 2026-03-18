@@ -18,9 +18,10 @@ final class Mount {
     var name: String    // A user-defined name for the mount.
     
     var user: String    // The username to connect with.
-    var host: String    // The hostname or IP address of the server.
-    var port: Int       // The port number to connect to. Default is 445.
     var share: String   // The share name on the server.
+    
+    @Relationship(deleteRule: .nullify)
+    var host: Host?     // The Host group this mount belongs to.
     
     // Reconnection properties:
     var autoReconnect: Bool = false
@@ -39,8 +40,6 @@ final class Mount {
         order: Int = 0,
         name: String = "Mt. Lonely",
         user: String = "guest",
-        host: String = "server.local",
-        port: Int = Config.Ports.samba,
         share: String = "share",
         isTemporary: Bool = false
     ) {
@@ -48,8 +47,6 @@ final class Mount {
         self.order = order
         self.name = name
         self.user = user
-        self.host = host
-        self.port = port
         self.share = share
         self.isTemporary = isTemporary
     }

@@ -32,8 +32,8 @@ extension Mount {
             order: self.order,
             name: self.name,
             user: self.user,
-            host: self.host,
-            port: self.port,
+            host: self.host?.hostname ?? "",
+            port: self.host?.port ?? Config.Ports.samba,
             share: self.share,
             autoReconnect: self.autoReconnect
         )
@@ -92,7 +92,7 @@ extension Mount {
             // Check host from remount URL:
             guard let remountURL = resourceValues.volumeURLForRemounting,
                   remountURL.scheme?.lowercased() == "smb",
-                  remountURL.host == self.host else {
+                  remountURL.host == self.host?.hostname else {
                 await logger("Host mismatch or invalid remount URL", level: .debug)
                 return false
             }

@@ -38,7 +38,7 @@ struct ListRowContent: View {
             // Auto-reconnect indicator:
             AutoReconnectButton(mount: self.mount)
             
-            Text(self.mount.name)
+            Text("/\(self.mount.share)")
                 .foregroundStyle(Config.UI.Colors.text)
             
             Spacer()

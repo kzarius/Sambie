@@ -199,9 +199,12 @@ final class EditorActions {
         
         mount.name = formData.name
         mount.user = formData.user
-        mount.host = formData.host
-        mount.port = formData.port
         mount.share = formData.share
+        mount.host = Host.findOrCreate(
+            hostname: formData.host,
+            port: formData.port,
+            in: self.modelContext
+        )
     }
     
     private func validateMount() throws {

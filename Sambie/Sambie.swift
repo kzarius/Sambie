@@ -25,7 +25,8 @@ struct Sambie: App {
         
         // Define schemas:
         let schema = Schema([
-            Mount.self
+            Mount.self,
+            Host.self
         ])
         
         // Create container with unique identifier:

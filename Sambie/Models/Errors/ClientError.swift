@@ -19,6 +19,7 @@ enum ClientError: Error, LocalizedError, Hashable, Codable {
     case alreadyMounted(path: String)
     case permissionDenied
     case invalidMount
+    case deleteDenied
     case notFound
 
     /// Samba credential errors:
@@ -50,6 +51,8 @@ enum ClientError: Error, LocalizedError, Hashable, Codable {
             return "Permission denied - you do not have the necessary permissions."
         case .invalidMount:
             return "The selected mount is invalid. It may have been deleted before the process could complete."
+        case .deleteDenied:
+            return "Delete denied - the mount cannot be deleted at this time."
         case .notFound:
             return "The specified mount was not found."
             

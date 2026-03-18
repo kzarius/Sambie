@@ -157,7 +157,7 @@ struct ListRow: View {
         // Fetch the mount path from the SambaMount utility:
         if let path = try? await SambaMount.getMountPath(
             user: self.mount.user,
-            host: self.mount.host,
+            host: self.mount.host?.hostname ?? "",
             share: self.mount.share
         ) {
             self.mountPoint = URL(filePath: path)

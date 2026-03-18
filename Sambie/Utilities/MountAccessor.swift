@@ -66,7 +66,13 @@ actor MountAccessor {
             throw ClientError.notFound
         }
             
+        let host = mount.host
         self.modelContext.delete(mount)
+        
+        // Delete the host group if this was its last mount:
+        if let host, host.mounts.isEmpty {
+            self.modelContext.delete(host)
+        }
 
         // Save context after deleting:
         try self.save()
@@ -115,6 +121,65 @@ actor MountAccessor {
             throw ClientError.notFound
         }
         mount.wasUnexpectedlyDisconnected = false
+        try self.save()
+    }
+    
+    // MARK: - Host Methods
+    /// Retrieves all Host IDs, sorted by their order. Used for listing hosts in the UI, and for grouping mounts by host.
+    func getAllHostIDs() -> [PersistentIdentifier] {
+        let descriptor = FetchDescriptor<Host>(sortBy: [SortDescriptor(\.order)])
+        do {
+            return try self.modelContext.fetch(descriptor).map { $0.persistentModelID }
+        } catch {
+            Task { await logger("Failed to fetch hosts: \(error)", level: .error) }
+            return []
+        }
+    }
+
+    /// Retrieves a Host object by its PersistentIdentifier and model container.
+    func getHost(id hostID: PersistentIdentifier) -> Host? {
+        self.modelContext.model(for: hostID) as? Host
+    }
+
+    /// Checks if a Host exists by its ID.
+    func hostExists(id hostID: PersistentIdentifier) -> Bool {
+        let internalID = hostID
+        let descriptor = FetchDescriptor<Host>(
+            predicate: #Predicate { $0.persistentModelID == internalID }
+        )
+        return (try? self.modelContext.fetchCount(descriptor) > 0) ?? false
+    }
+
+    /// Finds an existing Host by hostname, or creates one if none exists.
+    /// Use this when inserting a new Mount so they get grouped automatically.
+    func findOrCreateHost(hostname: String, port: Int) throws -> Host {
+        let descriptor = FetchDescriptor<Host>(
+            predicate: #Predicate { $0.hostname == hostname }
+        )
+        
+        // First attempt to find an existing Host with the same hostname:
+        if let existing = try self.modelContext.fetch(descriptor).first {
+            return existing
+        }
+
+        // Determine next order value:
+        let allDescriptor = FetchDescriptor<Host>(sortBy: [SortDescriptor(\.order, order: .reverse)])
+        let maxOrder = (try? self.modelContext.fetch(allDescriptor).first?.order) ?? -1
+
+        let host = Host(hostname: hostname, port: port, order: maxOrder + 1)
+        self.modelContext.insert(host)
+        return host
+    }
+
+    /// Deletes a Host by its PersistentIdentifier. Will throw an error if the Host has any Mounts, to prevent orphaned Mounts.
+    func deleteHost(id hostID: PersistentIdentifier) throws {
+        guard let host = self.getHost(id: hostID) else {
+            throw ClientError.notFound
+        }
+        guard host.mounts.isEmpty else {
+            throw ClientError.deleteDenied
+        }
+        self.modelContext.delete(host)
         try self.save()
     }
 }
