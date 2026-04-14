@@ -72,7 +72,7 @@ struct SambaURLParserField: View {
             
                 // Ensure we have an editing mount to update, and update.
                 self.formData?.user = user
-                self.formData?.host = host
+                self.formData?.host?.hostname = host
                 self.formData?.share = share
             
         } catch {

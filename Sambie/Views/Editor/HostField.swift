@@ -12,7 +12,7 @@ import SwiftUI
 struct HostField: View {
 
     // MARK: - Properties
-    @Binding var host: String
+    @Binding var hostname: String
     let share: String
     let username: String
     let password: String
@@ -21,12 +21,12 @@ struct HostField: View {
     // MARK: - View
     var body: some View {
         PopoverPickerField(
-            text: self.$host,
+            text: self.$hostname,
             icon: "antenna.radiowaves.left.and.right",
             help: "Test connection to host"
         ) {
             ConnectionTestView(
-                host: self.host,
+                host: self.hostname,
                 share: self.share,
                 username: self.username
             )

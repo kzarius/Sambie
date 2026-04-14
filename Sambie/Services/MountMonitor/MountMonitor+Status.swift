@@ -12,25 +12,41 @@ import SwiftData
 extension MountMonitor {
     /// Initializes the status of all mounts in parallel during actor initialization.
     internal func initializeAllStatuses() async {
-        let mountIDs = await self.accessor.getAllMountIDs()
+        // Get all mount IDs from the accessor:
+        let statuses = await self.getAllMountStatuses()
         
-        // Initialize statuses in parallel using a task group to speed up the process, especially if there are many mounts:
-        await withTaskGroup(of: (PersistentIdentifier, Bool).self) { group in
-            for mountID in mountIDs {
-                // Check each mount to see if it's mounted:
-                group.addTask {
-                    let isMounted = await MountClient(
-                        mountID: mountID,
-                        accessor: self.accessor,
-                        stateManager: self.stateManager
-                    ).isMounted()
-                    return (mountID, isMounted)
-                }
+        // Do the checks:
+        for (mountID, _, actualStatus) in statuses {
+            if actualStatus == .connected {
+                await self.stateManager.setStatus(.connected, for: mountID)
+            } else {
+                await self.stateManager.setStatus(.disconnected, for: mountID)
+                await self.scheduleStartupReconnect(for: mountID)
             }
+        }
+    }
+    
+    /// Sets the initial connection status for all mounts in parallel during actor startup.
+    /// Only determines if each mount is already active in the OS — no reconnect or zombie logic.
+    internal func updateAllStatuses() async {
+        // Get all mount IDs from the accessor:
+        let statuses = await self.fetchAllMountStatuses()
+        
+        for (mountID, recordedStatus, actualStatus) in statuses {
+            // Make sure it still exists before updating:
+            guard await self.accessor.exists(id: mountID) else { continue }
             
-            // Update the state manager with the initial status for each mount as results come in:
-            for await (mountID, isMounted) in group {
-                if isMounted {
+            // Check if the status has changed, and update it if so:
+            //----- ASK ABOUT THIS PART:
+            if actualStatus != recordedStatus {
+                await self.stateManager.setStatus(actualStatus, for: mountID)
+                if actualStatus == .disconnected, recordedStatus == .connected {
+                    let state = await self.stateManager.getState(for: mountID)
+                    guard !state.isForceUnmounting else { continue }
+                    await self.handleUnexpectedDisconnect(for: mountID)
+                }
+                
+                if actualStatus == .connected {
                     await self.stateManager.setStatus(.connected, for: mountID)
                 } else {
                     await self.stateManager.setStatus(.disconnected, for: mountID)
@@ -40,73 +56,88 @@ extension MountMonitor {
         }
     }
     
-    /// Checks and updates the status of all mounts.
-    /// This method is called periodically by the timer and performs the following steps for each mount:
-    /// 1. Checks the actual mount status using MountClient.
-    /// 2. Updates the state manager with the new status if it has changed.
-    /// 3. If a mount has unexpectedly disconnected, marks it as such to trigger the reconnect UI and schedules a reconnect if enabled.
-    /// 4. If a mount is connected but the server is unreachable, marks it as server unreachable and starts the timeout countdown for a potential zombie unmount.
-    internal func updateAllStatuses() async {
-        let mountIDs = await self.accessor.getAllMountIDs()
-        // Reset each cycle:
-        self.mountsNeedingZombieUnmount = []
+    /// The main periodic status cycle. Runs both mount-level and host-level checks concurrently.
+    /// Called by the monitoring timer on each tick.
+    internal func runStatusCycle() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.updateMountStatuses() }
+            group.addTask { await self.checkHostReachability() }
+        }
+    }
+    
+    /// Retrieves the recorded status, actual status, and server reachability for all mounts in parallel.
+    private func getAllMountStatuses() async -> [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] {
+        // Get all mount IDs from the accessor:
+        let mountIDs = await self.accessor.getMountIDs().values.flatMap { $0 }
         
-        // Check and update the status of each mount in parallel using a task group:
-        await withTaskGroup(of: (PersistentIdentifier, ConnectionStatus, ConnectionStatus, Bool).self) { group in
+        //
+        var results: [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] = []
+        await withTaskGroup(of: (PersistentIdentifier, ConnectionStatus, ConnectionStatus).self) { group in
             for mountID in mountIDs {
                 group.addTask {
-                    await self.checkMountStatus(for: mountID)
+                    await self.fetchMountStatus(for: mountID)
                 }
             }
-            
-            // Process the results as they come in, updating the state manager and handling any status changes or server unreachable conditions:
-            for await (mountID, recordedStatus, actualStatus, isServerReachable) in group {
-                guard await self.accessor.exists(id: mountID) else { continue }
-                
-                // Handle status changes:
-                if actualStatus != recordedStatus {
-                    await self.stateManager.setStatus(actualStatus, for: mountID)
-                    
-                    if actualStatus == .disconnected, recordedStatus == .connected {
-                        let state = await self.stateManager.getState(for: mountID)
-                        guard !state.isForceUnmounting else { continue }
-                        await self.handleUnexpectedDisconnect(for: mountID)
-                    }
-                }
-                
-                // Handle server unreachable condition for connected mounts:
-                if actualStatus == .connected, !isServerReachable {
-                    if let mountID = await self.prepareZombieUnmount(for: mountID) {
-                        mountsNeedingZombieUnmount.append(mountID)
-                    }
-                } else {
-                    await self.stateManager.clearServerUnreachable(for: mountID)
-                }
+            for await result in group {
+                results.append(result)
             }
         }
-        
-        // Run zombie unmounts in a separate task group so they don't block the status loop:
-        await withTaskGroup(of: Void.self) { group in
-            for mountID in mountsNeedingZombieUnmount {
-                group.addTask {
-                    await self.runZombieUnmount(for: mountID)
+        return results
+    }
+    
+    /// Checks the OS-level mount status for each mount and updates state accordingly.
+    /// Handles unexpected disconnects but does not perform host/server reachability checks.
+    private func updateMountStatuses() async {
+        let statuses = await self.fetchAllMountStatuses()
+
+        for (mountID, recordedStatus, actualStatus) in statuses {
+            // Skip if mount was deleted between fetch and now:
+            guard await self.accessor.exists(id: mountID) else { continue }
+
+            // Update state if status has changed:
+            if actualStatus != recordedStatus {
+                await self.stateManager.setStatus(actualStatus, for: mountID)
+
+                // Handle unexpected disconnects (connected → disconnected, not user-initiated):
+                if actualStatus == .disconnected, recordedStatus == .connected {
+                    let state = await self.stateManager.getState(for: mountID)
+                    guard !state.isForceUnmounting else { continue }
+                    await self.handleUnexpectedDisconnect(for: mountID)
                 }
             }
         }
     }
     
-    /// Checks the status of a single mount and returns the recorded status, actual status, and server reachability.
-    private func checkMountStatus(for mountID: PersistentIdentifier) async -> (PersistentIdentifier, ConnectionStatus, ConnectionStatus, Bool) {
-        // Verify mount exists and is not new before checking:
+    /// Fetches the recorded and actual OS-level mount status for all mounts in parallel.
+    private func fetchAllMountStatuses() async -> [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] {
+        // Get all mount IDs from the accessor:
+        let mountIDs = await self.accessor.getMountIDs().values.flatMap { $0 }
+
+        var results: [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] = []
+        await withTaskGroup(of: (PersistentIdentifier, ConnectionStatus, ConnectionStatus).self) { group in
+            for mountID in mountIDs {
+                group.addTask { await self.fetchMountStatus(for: mountID) }
+            }
+            for await result in group {
+                results.append(result)
+            }
+        }
+        return results
+    }
+    
+    /// Checks the OS-level mount status for a single mount.
+    /// Returns `(mountID, recordedStatus, actualStatus)`.
+    private func fetchMountStatus(for mountID: PersistentIdentifier) async -> (PersistentIdentifier, ConnectionStatus, ConnectionStatus) {
+        // Skip new or non-existent mounts:
         guard await self.accessor.exists(id: mountID),
               await self.accessor.getData(id: mountID)?.isNew == false else {
-            return (mountID, .disconnected, .disconnected, true)
+            return (mountID, .disconnected, .disconnected)
         }
         
         // Retrieve the recorded status from the state manager:
         let recordedStatus = await self.stateManager.getState(for: mountID).status
         guard recordedStatus != .connecting, recordedStatus != .disconnecting else {
-            return (mountID, recordedStatus, recordedStatus, true)
+            return (mountID, recordedStatus, recordedStatus)
         }
         
         let isMounted = await MountClient(
@@ -114,15 +145,89 @@ extension MountMonitor {
             accessor: self.accessor,
             stateManager: self.stateManager
         ).isMounted()
-        let actualStatus: ConnectionStatus = isMounted ? .connected : .disconnected
         
-        // Check server reachability if the mount is connected:
-        var isServerReachable = true
-        if isMounted, let mountData = await self.accessor.getData(id: mountID) {
-            isServerReachable = await SambaMount.isServerReachable(mountData: mountData)
+        return (
+            mountID,
+            recordedStatus,
+            isMounted ? .connected : .disconnected
+        )
+    }
+    
+    // MARK: - Host-Level Reachability Checks
+    /// Checks port reachability for each host that has at least one connected mount.
+    /// If a host is unreachable, all of its connected mounts are pushed into zombie handling.
+    private func checkHostReachability() async {
+        // Get all mounts grouped by host:
+        let mountsByHost = await self.accessor.getMountIDs()
+
+        // Collect hosts that have at least one connected mount:
+        var connectedHosts: [(PersistentIdentifier, [PersistentIdentifier])] = []
+        for (hostID, mountIDs) in mountsByHost {
+            let connectedMounts = await self.connectedMounts(from: mountIDs)
+            guard !connectedMounts.isEmpty else { continue }
+            connectedHosts.append((hostID, connectedMounts))
         }
-        
-        return (mountID, recordedStatus, actualStatus, isServerReachable)
+
+        // Check each host's reachability in parallel:
+        self.mountsNeedingZombieUnmount = []
+        await withTaskGroup(of: [PersistentIdentifier].self) { group in
+            for (hostID, connectedMountIDs) in connectedHosts {
+                group.addTask {
+                    await self.checkHost(
+                        hostID: hostID,
+                        connectedMountIDs: connectedMountIDs
+                    )
+                }
+            }
+            for await zombieMountIDs in group {
+                self.mountsNeedingZombieUnmount.append(contentsOf: zombieMountIDs)
+            }
+        }
+
+        // Run zombie unmounts in parallel:
+        await withTaskGroup(of: Void.self) { group in
+            for mountID in self.mountsNeedingZombieUnmount {
+                group.addTask { await self.runZombieUnmount(for: mountID) }
+            }
+        }
+    }
+
+    /// Checks a single host's port reachability and returns any mount IDs that need zombie unmounting.
+    private func checkHost(
+        hostID: PersistentIdentifier,
+        connectedMountIDs: [PersistentIdentifier]
+    ) async -> [PersistentIdentifier] {
+        guard let hostData = await self.accessor.getHostData(for: hostID) else { return [] }
+
+        let isReachable = await (try? Host.checkPortAccessible(
+            host: hostData.hostname,
+            port: hostData.port
+        )) != nil
+
+        if isReachable {
+            for mountID in connectedMountIDs {
+                await self.stateManager.clearServerUnreachable(for: mountID)
+            }
+            return []
+        }
+
+        var zombieIDs: [PersistentIdentifier] = []
+        for mountID in connectedMountIDs {
+            if let id = await self.prepareZombieUnmount(for: mountID) {
+                zombieIDs.append(id)
+            }
+        }
+        return zombieIDs
+    }
+
+    /// Returns the subset of the given mount IDs that are currently connected.
+    private func connectedMounts(from mountIDs: [PersistentIdentifier]) async -> [PersistentIdentifier] {
+        var connected: [PersistentIdentifier] = []
+        for mountID in mountIDs {
+            let status = await self.stateManager.getState(for: mountID).status
+            if status == .connected { connected.append(mountID) }
+        }
+        return connected
     }
     
     /// Handles auto-reconnect logic for an unexpectedly disconnected mount.

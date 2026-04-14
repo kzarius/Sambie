@@ -26,6 +26,9 @@ extension SambaMount {
 
     /// Validates that a host string is a valid IP address, hostname, or FQDN.
     static func validateHost(_ host: String) throws {
+        // Host cannot be empty:
+        guard !host.isEmpty else { throw ClientError.invalidHost }
+        
         // Check for obviously invalid patterns:
         if host.contains("//") || host.contains("@") { throw ClientError.invalidHost }
         
@@ -50,11 +53,17 @@ extension SambaMount {
     /// Retrieve the password for the specified mount data from the Keychain.
     /// - Parameter mountData: The mount data object containing host and user information.
     internal static func retrievePassword(for mountData: MountDataObject) async -> String? {
+        // If there's no host configured, we can't look up a password:
+        guard let hostData = mountData.host else {
+            await logger("Skipping Keychain lookup — mount has no host configured", level: .debug)
+            return nil
+        }
+        
         do {
-            let keychain = Keychain(server: mountData.host, protocolType: .smb)
+            let keychain = Keychain(server: "smb://\(hostData.hostname)", protocolType: .smb)
             return try keychain.get(mountData.user)
         } catch {
-            await logger("Keychain access failed for \(mountData.user)@\(mountData.host)", level: .debug)
+            await logger("Keychain access failed for \(mountData.user)@\(hostData.hostname)", level: .debug)
             return nil
         }
     }

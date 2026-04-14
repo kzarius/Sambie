@@ -17,6 +17,7 @@ final class Host {
     var hostname: String            // The hostname or IP address of the server.
     var port: Int                   // The SMB port for this host. Default is 445.
     var order: Int                  // Display order in the grouped list.
+    var paletteName: String         // Color palette name for UI theming.
     var customDisplayName: String?  // Optional user-defined alias (e.g. "Home NAS").
 
     // Relationship — deny deletion if mounts still exist:
@@ -37,6 +38,8 @@ final class Host {
         self.port = port
         self.order = order
         self.customDisplayName = displayName
+        self.paletteName = Config.UI.Colors.Palette.allCases.randomElement()?.rawValue
+                    ?? Config.UI.Colors.Palette.orangish.rawValue
     }
 
 
@@ -44,5 +47,18 @@ final class Host {
     /// The name to show in the UI — alias if set, otherwise the raw hostname.
     var displayName: String {
         self.customDisplayName ?? self.hostname
+    }
+    
+    /// Creates a `HostDataObject` from the current `Host` instance.
+    func toDataObject() -> HostDataObject {
+        HostDataObject(
+            persistentID: self.persistentModelID,
+            id: self.id,
+            hostname: self.hostname,
+            port: self.port,
+            order: self.order,
+            displayName: self.displayName,
+            paletteName: self.paletteName
+        )
     }
 }

@@ -12,7 +12,7 @@ struct SharePickerField: View {
 
     // MARK: - Properties
     @Binding var share: String
-    let host: String
+    @Binding var hostname: String
     let username: String
     let password: String
 
@@ -26,7 +26,7 @@ struct SharePickerField: View {
         ) {
             // Generate the share list when the popover opens, and update the share field when a share is selected:
             ShareBrowserView(
-                host: self.host,
+                hostname: self.hostname,
                 username: self.username,
                 password: self.password
             ) { selected in

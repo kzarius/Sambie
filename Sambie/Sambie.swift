@@ -20,8 +20,8 @@ struct Sambie: App {
     /// The model container used to share the context between views.
     var sharedModelContainer: ModelContainer = {
         
-        // Clear any problematic stores if needed during development. Usually if we change the models attached:
-//         try? clearPreviousStore()
+        // Clear any problematic stores if needed during development:
+//         try? clearPersistentStore()
         
         // Define schemas:
         let schema = Schema([
@@ -117,25 +117,6 @@ struct Sambie: App {
                     await self.mountMonitor?.startMonitoring()
                     self.isInitialized = true
                 }
-        }
-    }
-    
-    
-    // MARK: - Store Management
-    /// Function to clear previous store during development.
-    private static func clearPreviousStore() throws {
-        let schema = Schema([Mount.self])
-        let modelConfiguration = ModelConfiguration(schema: schema)
-        
-        do {
-            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            let context = container.mainContext
-            
-            try context.delete(model: Mount.self)
-            try context.save()
-        } catch {
-            print("Failed to clear mounts: \(error)")
-            throw error
         }
     }
 }

@@ -19,26 +19,6 @@ extension Mount {
         })
     }
     
-    /// Creates a `MountDataObject` from the current `Mount` instance.
-    /// Calls the keychain to retrieve the stored password.
-    /// Also calls MountPointServices and fetches if the mount point exists.
-    /// - Throws: `ConfigurationError.keychainUnaccessible` if the keychain cannot be accessed.
-    /// - Returns: A `MountDataObject` representing the current mount.
-    func toDataObject() async -> MountDataObject {
-        
-        return MountDataObject(
-            persistentID: self.persistentModelID,
-            id: self.id,
-            order: self.order,
-            name: self.name,
-            user: self.user,
-            host: self.host?.hostname ?? "",
-            port: self.host?.port ?? Config.Ports.samba,
-            share: self.share,
-            autoReconnect: self.autoReconnect
-        )
-    }
-    
     /// Checks if the current mount instance exists in the database with the given context.
     @MainActor func exists(context: ModelContext) -> Bool {
         return Mount.exists(persistentID: self.persistentModelID, context: context)

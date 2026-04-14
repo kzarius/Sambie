@@ -98,7 +98,7 @@ actor MountClient: Sendable {
     
     /// Attempt to unmount the directory.
     func doUnmount() async throws {
-        guard let mountData = await self.accessor.getData(id: self.mountID) else {
+        guard let mountData = await self.accessor.getData(id: self.mountID), let hostData = mountData.host else {
             await logger("Attempted to unmount, but mount data could not be retrieved.", level: .error)
             throw ClientError.notFound
         }
@@ -107,7 +107,7 @@ actor MountClient: Sendable {
         do {
             try await SambaMount.checkForMountInSystem(
                 user: mountData.user,
-                host: mountData.host,
+                host: hostData.hostname,
                 share: mountData.share
             )
         } catch {
@@ -118,7 +118,7 @@ actor MountClient: Sendable {
         // Get the mount point for the share:
         let mountPoint = try await SambaMount.getMountPath(
             user: mountData.user,
-            host: mountData.host,
+            host: hostData.hostname,
             share: mountData.share
         )
         
@@ -140,16 +140,16 @@ actor MountClient: Sendable {
     /// - Returns: A boolean indicating if the mount is present.
     func isMounted() async -> Bool {
         do {
-            guard let mountData = await self.accessor.getData(id: self.mountID) else {
+            guard let mountData = await self.accessor.getData(id: self.mountID), let hostData = mountData.host else {
                 await logger("Attempted to check if mount is mounted, but mount data could not be retrieved.", level: .error)
                 throw ClientError.notFound
             }
             
-            await logger("Checking if mount `\(SambaURL.create(from: mountData))` is mounted...", level: .debug)
+            await logger("Checking if mount `\(String(describing: SambaURL.create(from: mountData)))` is mounted...", level: .debug)
             
             try await SambaMount.checkForMountInSystem(
                 user: mountData.user,
-                host: mountData.host,
+                host: hostData.hostname,
                 share: mountData.share
             )
             await logger(" - ✅ Mount is mounted.", level: .debug)
@@ -178,7 +178,7 @@ actor MountClient: Sendable {
             await logger("Attempting to force unmount suspected zombie mount with ID \(self.mountID)", level: .warning)
             
             // Retrieve mount data:
-            guard let mountData = await self.accessor.getData(id: self.mountID) else {
+            guard let mountData = await self.accessor.getData(id: self.mountID), let hostData = mountData.host else {
                 await logger("🧟 Attempted to force unmount zombie, but mount data could not be retrieved.", level: .error)
                 await self.updateState(status: .connected)
                 return
@@ -187,7 +187,7 @@ actor MountClient: Sendable {
             // Get the mount point for the share:
             let mountPoint = try await SambaMount.getMountPath(
                 user: mountData.user,
-                host: mountData.host,
+                host: hostData.hostname,
                 share: mountData.share
             )
 

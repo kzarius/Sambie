@@ -7,7 +7,7 @@
 
 import KeychainAccess
 import SwiftData
-import Foundation
+import SwiftUI
 
 
 /// Provides access to Mount objects for backend, non-Main Actor code, that we pass down via environment.
@@ -17,16 +17,39 @@ actor MountAccessor {
     // @ModelActor provides modelContext, which we must initialize via MountAccessor(ModelContainer)
     
     // MARK: - Public Methods
-    /// Retrieves all Mount objects.
-    func getAllMountIDs() -> [PersistentIdentifier] {
-        let fetchDescriptor = FetchDescriptor<Mount>()
+    /// Retrieves all Mount IDs grouped by their host's PersistentIdentifier.
+    /// - Returns: A dictionary where each key is a host's PersistentIdentifier, and the value is an array of Mount PersistentIdentifiers belonging to that host.
+    func getMountIDs() -> [PersistentIdentifier: [PersistentIdentifier]] {
+        // Create a fetch descriptor to get all Mounts, sorted by their 'order' property:
+        let descriptor = FetchDescriptor<Mount>(sortBy: [SortDescriptor(\.order)])
         do {
-            let mounts = try self.modelContext.fetch(fetchDescriptor)
-            return mounts.map { $0.persistentModelID }
+            // Fetch all Mount objects from the model context:
+            let mounts = try self.modelContext.fetch(descriptor)
+            
+            // Group mounts by their host's persistentModelID (hostID, mountID):
+            let grouped = Dictionary(
+                grouping: mounts.compactMap { mount -> (PersistentIdentifier, PersistentIdentifier)? in
+                    
+                    // Only include mounts that have a host:
+                    guard let hostID = mount.host?.persistentModelID else { return nil }
+                    return (hostID, mount.persistentModelID)
+                },
+                // Group by hostID:
+                by: { $0.0 }
+            )
+            
+            // Transform the grouped dictionary to map each hostID to an array of mountIDs:
+            return grouped.mapValues { $0.map(\.1) }
         } catch {
-            Task { await logger("Failed to fetch mounts: \(error)", level: .error) }
-            return []
+            Task { await logger("Failed to fetch mounts grouped by host: \(error)", level: .error) }
+            return [:]
         }
+    }
+
+    /// Retrieves Mount IDs for a specific host, sorted by order.
+    /// - Parameter hostID: The PersistentIdentifier of the host to filter by.
+    func getMountIDs(forHost hostID: PersistentIdentifier) -> [PersistentIdentifier] {
+        self.getMountIDs()[hostID] ?? []
     }
  
     /// Checks if a mount exists by its ID.
@@ -42,7 +65,7 @@ actor MountAccessor {
     }
     
     // MARK: - Data Accessors
-    /// Returns an array of tuples with the most important mount data.
+    /// Returns a `MountDataObject` (with embedded `HostDataObject`) for the given mount ID.
     func getData(id mountID: PersistentIdentifier) async -> MountDataObject? {
         // Use exists check first to avoid accessing invalidated models:
         guard await self.exists(id: mountID) else { return nil }
@@ -137,12 +160,35 @@ actor MountAccessor {
     }
 
     /// Retrieves a Host object by its PersistentIdentifier and model container.
-    func getHost(id hostID: PersistentIdentifier) -> Host? {
-        self.modelContext.model(for: hostID) as? Host
+    func getHost(for hostID: PersistentIdentifier) -> Host? {
+        guard self.doesHostExist(for: hostID) else { return nil }
+        return self.modelContext.model(for: hostID) as? Host
+    }
+    
+    /// Returns a `HostDataObject` for the given host ID, or nil if the Host doesn't exist.
+    func getHostData(for hostID: PersistentIdentifier) -> HostDataObject? {
+        self.getHost(for: hostID)?.toDataObject()
+    }
+    
+    /// Updates the palette for a Host and saves.
+    func setHostPalette(
+        for hostID: PersistentIdentifier,
+        palette: Config.UI.Colors.Palette
+    ) throws {
+        guard let host = self.getHost(for: hostID) else { throw ClientError.notFound }
+        host.paletteName = palette.rawValue
+        try self.save()
+    }
+    
+    /// Updates the order for a Host and saves.
+    func setHostOrder(for hostID: PersistentIdentifier, order: Int) throws {
+        guard let host = self.getHost(for: hostID) else { throw ClientError.notFound }
+        host.order = order
+        try self.save()
     }
 
     /// Checks if a Host exists by its ID.
-    func hostExists(id hostID: PersistentIdentifier) -> Bool {
+    func doesHostExist(for hostID: PersistentIdentifier) -> Bool {
         let internalID = hostID
         let descriptor = FetchDescriptor<Host>(
             predicate: #Predicate { $0.persistentModelID == internalID }
@@ -172,8 +218,8 @@ actor MountAccessor {
     }
 
     /// Deletes a Host by its PersistentIdentifier. Will throw an error if the Host has any Mounts, to prevent orphaned Mounts.
-    func deleteHost(id hostID: PersistentIdentifier) throws {
-        guard let host = self.getHost(id: hostID) else {
+    func deleteHost(for hostID: PersistentIdentifier) throws {
+        guard let host = self.getHost(for: hostID) else {
             throw ClientError.notFound
         }
         guard host.mounts.isEmpty else {
@@ -181,5 +227,21 @@ actor MountAccessor {
         }
         self.modelContext.delete(host)
         try self.save()
+    }
+    
+    /// Checks if a host's SMB port is accessible.
+    func isHostReachable(id hostID: PersistentIdentifier, timeout: TimeInterval = 5.0) async -> Bool {
+        guard let host = self.getHost(for: hostID) else { return false }
+        return await host.isReachable(timeout: timeout)
+    }
+
+    /// Verifies that a host's SMB port is accessible, throwing if not.
+    func checkHostPortAccessible(id hostID: PersistentIdentifier, timeout: TimeInterval = 5.0) async throws {
+        guard let host = self.getHost(for: hostID) else { throw ClientError.notFound }
+        try await self.checkHostPortAccessible(for: host.toDataObject(), timeout: timeout)
+    }
+    
+    func checkHostPortAccessible(for hostObject: HostDataObject, timeout: TimeInterval = 5.0) async throws {
+        try await Host.checkPortAccessible(host: hostObject.hostname, port: hostObject.port, timeout: timeout)
     }
 }

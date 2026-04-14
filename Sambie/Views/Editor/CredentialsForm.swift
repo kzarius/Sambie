@@ -34,7 +34,7 @@ struct CredentialsForm: View {
                     
                     LabeledInputField(label: "Host") {
                         HostField(
-                            host: $formData.host,
+                            hostname: $formData.pendingHostname,
                             share: $formData.wrappedValue.share,
                             username: $formData.wrappedValue.user,
                             password: self.password
@@ -44,7 +44,7 @@ struct CredentialsForm: View {
                     LabeledInputField(label: "Share") {
                         SharePickerField(
                             share: $formData.share,
-                            host: $formData.wrappedValue.host,
+                            hostname: $formData.pendingHostname,
                             username: $formData.wrappedValue.user,
                             password: self.password
                         )

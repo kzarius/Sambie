@@ -12,7 +12,7 @@ import SwiftUI
 struct ShareBrowserView: View {
 
     // MARK: - Properties
-    let host: String
+    let hostname: String
     let username: String
     let password: String
     // The selected share name is passed as the argument:
@@ -46,7 +46,7 @@ struct ShareBrowserView: View {
                 .foregroundStyle(.secondary)
             
             // Display the host, or a placeholder if it hasn't been set yet:
-            Text(self.host.isEmpty ? "No host specified" : self.host)
+            Text(self.hostname.isEmpty ? "No host specified" : self.hostname)
                 .font(.headline)
                 .lineLimit(1)
             
@@ -132,7 +132,7 @@ struct ShareBrowserView: View {
     /// Resets state before each fetch and updates `shares` or `error` on completion.
     private func loadShares() async {
         // Guard against fetching when no host has been entered:
-        guard !self.host.isEmpty else {
+        guard !self.hostname.isEmpty else {
             self.error = "Enter a host to browse shares."
             return
         }
@@ -144,7 +144,7 @@ struct ShareBrowserView: View {
         do {
             // Pass nil for empty strings so smbutil uses guest/anonymous access:
             self.shares = try await SambaMount.listShares(
-                at: self.host,
+                at: self.hostname,
                 username: self.username.isEmpty ? nil : self.username,
                 password: self.password.isEmpty ? nil : self.password
             )

@@ -201,8 +201,8 @@ final class EditorActions {
         mount.user = formData.user
         mount.share = formData.share
         mount.host = Host.findOrCreate(
-            hostname: formData.host,
-            port: formData.port,
+            hostname: formData.pendingHostname,
+            port: formData.host?.port ?? Config.Ports.samba,
             in: self.modelContext
         )
     }
@@ -211,31 +211,33 @@ final class EditorActions {
         guard let formData = self.formData else { return }
         
         try SambaMount.validateUsername(formData.user)
-        try SambaMount.validateHost(formData.host)
+        try SambaMount.validateHost(formData.pendingHostname)
         try SambaMount.validateShareName(formData.share)
     }
     
     private func savePasswordToKeychain(password: String) throws {
         guard let formData = self.formData else { return }
         
+        let serverURL = "smb://\(formData.pendingHostname)"
         let keychain = Keychain(
-            server: formData.host,
+            server: serverURL,
             protocolType: .smb
         )
         
         try keychain.set(password, key: formData.user)
-        logger("Saved password to system Keychain for \(formData.user)@\(formData.host)", level: .debug)
+        logger("Saved password to system Keychain for \(formData.user)@\(formData.pendingHostname)", level: .debug)
     }
     
     private func deletePasswordFromKeychain() throws {
         guard let formData = self.formData else { return }
         
+        let serverURL = "smb://\(formData.pendingHostname)"
         let keychain = Keychain(
-            server: formData.host,
+            server: serverURL,
             protocolType: .smb
         )
         
         try keychain.remove(formData.user)
-        logger("Removed password from system Keychain for \(formData.user)@\(formData.host)", level: .debug)
+        logger("Removed password from system Keychain for \(formData.user)@\(formData.pendingHostname)", level: .debug)
     }
 }

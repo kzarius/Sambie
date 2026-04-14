@@ -16,15 +16,14 @@ struct MenuBarIcon: View {
     @State private var mountIDs: [PersistentIdentifier] = []
     
     // Colors:
-    private let checkmarkColor = Config.UI.Colors.primary
-    private let notConnectedColor = Config.UI.Colors.secondary
+    private let hasConnectionsColor = Config.UI.Colors.primary
+    private let noConnectionsColor = Config.UI.Colors.secondary
     
-    // Runs a query to see if there are any connected mounts:
-    private var hasConnectedMounts: Bool {
-        let connectedStatuses: Set<ConnectionStatus> = [.connected, .disconnecting]
-        return self.mountIDs.contains { (mountID: PersistentIdentifier) -> Bool in
-            let status = self.stateManager.getState(for: mountID).status
-            return connectedStatuses.contains(status)
+    // Computed:
+    private var hasConnectedMount: Bool {
+        mountIDs.contains {
+            let status = stateManager.getState(for: $0).status
+            return status == .connected || status == .disconnecting
         }
     }
     
@@ -32,20 +31,20 @@ struct MenuBarIcon: View {
     // MARK: - View
     var body: some View {
         Group {
-            // Connected mounts icon:
-            if self.hasConnectedMounts {
+            if self.hasConnectedMount {
                 Image(systemName: "externaldrive.fill.badge.checkmark")
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(self.checkmarkColor, .primary)
-                // Default icon:
+                    .foregroundStyle(self.hasConnectionsColor, .primary)
+
             } else {
                 Image(systemName: Config.UI.Icons.menuBar)
-                    .foregroundColor(self.notConnectedColor)
+                    .foregroundColor(self.noConnectionsColor)
             }
         }
+        // Update the mount IDs when the view appears:
         .task {
             guard let accessor = self.accessor else { return }
-            self.mountIDs = await accessor.getAllMountIDs()
+            self.mountIDs = await accessor.getMountIDs().values.flatMap { $0 }
         }
     }
 }

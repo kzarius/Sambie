@@ -8,7 +8,7 @@
 import SwiftUI
 import SwiftData
 
-struct MenuBarRow: View {
+struct MenuBarMountRow: View {
     
     // MARK: - Properties
     // Passed:

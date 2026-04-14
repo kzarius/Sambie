@@ -50,4 +50,20 @@ final class Mount {
         self.share = share
         self.isTemporary = isTemporary
     }
+    
+    /// Creates a `MountDataObject` from the current `Mount` instance.
+    /// - Returns: A `MountDataObject` representing the current mount.
+    func toDataObject() async -> MountDataObject {
+        MountDataObject(
+            persistentID: self.persistentModelID,
+            id: self.id,
+            order: self.order,
+            name: self.name,
+            user: self.user,
+            host: self.host?.toDataObject(),
+            pendingHostname: self.host?.hostname ?? "",
+            share: self.share,
+            autoReconnect: self.autoReconnect
+        )
+    }
 }

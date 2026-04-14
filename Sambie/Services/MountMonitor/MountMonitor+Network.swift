@@ -22,34 +22,18 @@ extension MountMonitor {
     }
     
     /// Processes network path updates from NWPathMonitor.
-    /// Resets reconnection backoff for auto-reconnect mounts when network connectivity is restored.
+    /// This method checks if the network has transitioned from unavailable to available, and if so, it runs the status cycle and processes scheduled reconnects immediately. On network restore, immediately triggers a full status cycle and reconnect pass rather than waiting for the next timer tick.
+    /// - Parameter path: The updated NWPath from the monitor.
     private func processNetworkPathUpdate(path: NWPath) async {
         let wasAvailable = self.isNetworkAvailable
         self.isNetworkAvailable = path.status == .satisfied
         self.currentNetworkPath = path
         
+        // Only trigger reconnects if we transitioned from unavailable to available:
         guard !wasAvailable && self.isNetworkAvailable else { return }
         
-        await logger("Network restored, resetting backoff for auto-reconnect mounts", level: .info)
-        
-        let mountIDs = await self.accessor.getAllMountIDs()
-        for mountID in mountIDs {
-            guard let mountData = await self.accessor.getData(id: mountID),
-                  mountData.autoReconnect else {
-                continue
-            }
-            
-            let state = await self.stateManager.getState(for: mountID)
-            guard state.status == .disconnected, !state.isForceUnmounting else {
-                await logger("⚡ [network restore] skipping \(mountID) — status=\(state.status) isForceUnmounting=\(state.isForceUnmounting)", level: .debug)
-                continue
-            }
-            
-            await self.resetBackoff(for: mountID)
-            await self.stateManager.setReconnectAttempt(0, nextAt: Date(), for: mountID)
-        }
-        
-        // Immediately attempt reconnects rather than waiting for the next timer tick:
-        Task { await self.processScheduledReconnects() }
+        await logger("⚡ Network restored — triggering immediate status cycle and reconnect pass", level: .info)
+        await self.runStatusCycle()
+        await self.processScheduledReconnects()
     }
 }

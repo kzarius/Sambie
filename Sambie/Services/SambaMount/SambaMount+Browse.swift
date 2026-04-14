@@ -24,7 +24,7 @@ extension SambaMount {
     ) async throws -> [String] {
         // Construct the target URL for `smbutil`:
         let target = await SambaURL.create(
-            host: host,
+            hostname: host,
             username: username,
             password: password
         ).absoluteString

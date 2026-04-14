@@ -13,132 +13,114 @@ struct ListView: View {
     // MARK: - Properties
     @Binding var editorState: EditorState
     @State private var contentHeight: CGFloat = 140
+    @State private var controller: ListController?
+    @Environment(\.mountAccessor) private var accessor
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Mount.order) private var allMounts: [Mount]
-    
-    // List of only the saved mounts, not including new unsaved ones:
-    private var savedMounts: [Mount] {
-        self.allMounts.filter { !$0.isTemporary }
-    }
-    
-    // Group mounts by host:
-    private var groupedMounts: [(host: String, mounts: [Mount])] {
-        let grouped = Dictionary(grouping: savedMounts, by: { $0.host?.hostname ?? "Unknown" })
-        return grouped.map { hostname, mounts in
-            (host: hostname, mounts: mounts)
-        }
-        .sorted { $0.host < $1.host }
-    }
 
     
     // MARK: - View
     var body: some View {
-        List {
-            ForEach(groupedMounts, id: \.host) { group in
-                self.hostHeaderRow(for: group.host)
-                self.shareRows(for: group)
+        Group {
+            if let controller {
+                self.listContent(controller: controller)
             }
-            
-            AddMountRow(editorState: self.$editorState)
         }
-        .onScrollGeometryChange(for: CGFloat.self) { geo in
-            geo.contentSize.height
-        } action: { _, newHeight in
-            contentHeight = newHeight
+        .task {
+            guard let accessor else { return }
+            self.controller = ListController(accessor: accessor)
+            await self.controller?.fetchMounts()
         }
-        .onChange(of: self.savedMounts.count) {
-            contentHeight = 0
+        .onChange(of: editorState) { _, newState in
+            guard case .closed = newState else { return }
+            Task {
+                await self.controller?.fetchMounts()
+            }
         }
-        .navigationTitle("Mounts")
-        .listStyle(.plain)
-        .frame(width: 620)
-        .frame(height: min(contentHeight, 620))
     }
     
     
     // MARK: - Subviews
     @ViewBuilder
-    private func hostHeaderRow(for host: String) -> some View {
-        HStack {
-            Image(systemName: "server.rack")
-                .foregroundStyle(.secondary)
-            Text(host)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Spacer()
+    /// View for the list content. Displays the grouped mounts with headers and share rows.
+    private func listContent(controller: ListController) -> some View {
+        List {
+            ForEach(controller.orderedHostIDs, id: \.self) { hostID in
+                if let host = self.modelContext.model(for: hostID) as? Host {
+                    let mountIDs = controller.allMountIDs[hostID] ?? []
+                    
+                    VStack(spacing: 0) {
+                        self.groupRow(
+                            host: host,
+                            mountIDs: mountIDs,
+                            controller: controller
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                }
+            }
+            .onMove { source, destination in
+                Task {
+                    await controller.moveGroup(from: source, to: destination)
+                }
+            }
+
+            AddMountRow(editorState: self.$editorState)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(6)
-        .listRowSeparator(.hidden)
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            geo.contentSize.height
+        } action: { _, newHeight in
+            self.contentHeight = newHeight
+        }
+        .navigationTitle("Mounts")
+        .listStyle(.plain)
+        .frame(width: 620)
+        .frame(height: min(self.contentHeight, 620))
+    }
+    
+    @ViewBuilder
+    /// Renders a single host group with its header and share rows.
+    private func groupRow(
+        host: Host,
+        mountIDs: [PersistentIdentifier],
+        controller: ListController
+    ) -> some View {
+        VStack(spacing: 0) {
+            HostHeaderRow(host: host)
+            self.shareRows(mountIDs: mountIDs)
+        }
     }
 
     @ViewBuilder
-    private func shareRows(for group: (host: String, mounts: [Mount])) -> some View {
-        ForEach(group.mounts) { mount in
-            shareRow(for: mount)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+    /// View for the share rows within a host group. Iterates over the mounts for the host and creates a row for each, hiding separators and adjusting insets for a clean grouped appearance.
+    private func shareRows(mountIDs: [PersistentIdentifier]) -> some View {
+        ForEach(Array(mountIDs.enumerated()), id: \.element) { index, mountID in
+            if let mount = self.modelContext.model(for: mountID) as? Mount {
+                let isLast = index == mountIDs.count - 1
+                
+                self.shareRow(mount: mount, isLast: isLast)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+            }
         }
     }
 
     @ViewBuilder
-    private func shareRow(for mount: Mount) -> some View {
+    /// View for an individual share row. Displays the mount information and includes a vertical separator on the left for visual grouping. The `isLast` parameter can be used to adjust styling if needed (e.g., rounded corners on the last item).
+    private func shareRow(mount: Mount, isLast: Bool) -> some View {
         HStack(spacing: 0) {
             Rectangle()
                 .fill(Color.gray.opacity(0.3))
-                .frame(width: 2)
+                .frame(width: 4)
                 .padding(.leading, 16)
 
             ListRow(
                 mount: mount,
+                isLast: isLast,
                 editorState: self.$editorState
             )
         }
-    }
-
-    @ViewBuilder
-    private func realMountRow(mount: Mount) -> some View {
-        ListRow(
-            mount: mount,
-            editorState: self.$editorState
-        )
-    }
-
-    @ViewBuilder
-    private func fakeMountRow(name: String) -> some View {
-        HStack {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(.secondary)
-            Text(name)
-                .foregroundStyle(.secondary)
-                .italic()
-            Spacer()
-            Text("mock")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.gray.opacity(0.15))
-                .cornerRadius(4)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(6)
-        .font(.title2)
-    }
-    
-    /// Handles reordering of mounts in the list. Updates the `order` property of each mount based on the new order after moving, and saves changes to the context.
-    private func move(from source: IndexSet, to destination: Int) {
-        // Update the order of mounts after moving:
-        var mounts = self.savedMounts
-        mounts.move(fromOffsets: source, toOffset: destination)
-        for (index, mount) in mounts.enumerated() {
-            mount.order = index
-        }
-        // Save changes to the context:
-        try? self.modelContext.save()
     }
 }

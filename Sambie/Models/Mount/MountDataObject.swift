@@ -15,9 +15,9 @@ struct MountDataObject: Sendable, Identifiable, Equatable {
         lhs.name == rhs.name &&
         lhs.user == rhs.user &&
         lhs.host == rhs.host &&
-        lhs.port == rhs.port &&
         lhs.share == rhs.share &&
         lhs.isNew == rhs.isNew &&
+        lhs.pendingHostname == rhs.pendingHostname &&
         lhs.autoReconnect == rhs.autoReconnect
     }
     
@@ -26,8 +26,8 @@ struct MountDataObject: Sendable, Identifiable, Equatable {
     var order: Int
     var name: String
     var user: String
-    var host: String
-    var port: Int
+    var host: HostDataObject?
+    var pendingHostname: String = ""
     var share: String
     var autoReconnect: Bool
     // Object-specific:

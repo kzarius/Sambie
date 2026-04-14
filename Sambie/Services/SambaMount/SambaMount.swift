@@ -26,12 +26,12 @@ final actor SambaMount {
             throw ClientError.notFound
         }
 
-        // Verify connection prerequisites (keep your existing implementations):
-        try await SambaMount.verifyHostResolvable(host: mountData.host)
-        try await SambaMount.checkPortAccessible(host: mountData.host, port: mountData.port)
+        guard let hostData = mountData.host else { throw ClientError.notFound }
+        // Verify connection prerequisites (host is reachable, port is open):
+        try await self.accessor.checkHostPortAccessible(for: hostData)
         // Perform the actual NetFS mount:
         try await SambaMount.mountShare(mountData: mountData)
 
-        await logger("Mounted \(mountData.host)/\(mountData.share)", level: .info)
+        await logger("Mounted \(hostData.hostname)/\(mountData.share)", level: .info)
     }
 }

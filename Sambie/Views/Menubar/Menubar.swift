@@ -10,16 +10,20 @@ import SwiftData
 
 struct MenuBar: View {
     @Environment(\.openWindow) private var openWindow
-    @Query(sort: \Mount.name) private var mounts: [Mount]
+    @Query(sort: \Host.order) private var hosts: [Host]
     
     var body: some View {
         Group {
             // Mount list:
-            if self.mounts.isEmpty {
+            if self.hosts.isEmpty {
                 Text("No mounts found.")
             } else {
-                ForEach(self.mounts) { mount in
-                    MenuBarRow(mount: mount)
+                ForEach(self.hosts) { host in
+                    
+                    // Only show hosts that have mounts:
+                    if !host.mounts.isEmpty {
+                        MenuBarHostSection(host: host)
+                    }
                 }
             }
             

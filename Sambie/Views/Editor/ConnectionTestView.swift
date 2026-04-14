@@ -14,13 +14,15 @@ import SwiftData
 struct ConnectionTestView: View {
 
     // MARK: - Properties
-
     // The hostname or IP address to test connectivity against:
     let host: String
     // The SMB share name to validate (checked for invalid characters only):
     let share: String
     // The username to validate (checked for invalid characters only):
     let username: String
+    
+    // Accessor to interface with the data models:
+    @Environment(\.mountAccessor) private var accessor
     
     // The human-readable result string. Empty string means success; nil means not yet run:
     @State private var result: String? = nil
@@ -43,7 +45,9 @@ struct ConnectionTestView: View {
         // Run the test as soon as the popover opens, and again on refresh:
         .task(id: self.runID) { await self.runTest() }
     }
-
+    
+    
+    // MARK: - Private Methods
     /// The top bar showing the target host and a re-test button.
     private var headerView: some View {
         HStack(spacing: 6) {
@@ -133,8 +137,6 @@ struct ConnectionTestView: View {
         .padding()
     }
 
-
-    // MARK: - Private Methods
     /// Validates credentials and tests DNS resolution and SMB port accessibility.
     /// Sets `result` to an empty string on success, or an error message on failure.
     private func runTest() async {
@@ -152,11 +154,8 @@ struct ConnectionTestView: View {
             try SambaMount.validateHost(self.host)
             try SambaMount.validateShareName(self.share)
 
-            // Step 1: Verify DNS resolution:
-            try await SambaMount.verifyHostResolvable(host: self.host)
-
-            // Step 2: Verify SMB port accessibility:
-            try await SambaMount.checkPortAccessible(host: self.host, port: Config.Ports.samba)
+            // Verify DNS resolution:
+            try await Host.checkPortAccessible(host: self.host, port: Config.Ports.samba)
 
             // Empty string signals success:
             self.result = ""
