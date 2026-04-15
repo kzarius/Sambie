@@ -12,10 +12,10 @@ import Foundation
 struct MountDataObject: Sendable, Identifiable, Equatable {
     static func == (lhs: MountDataObject, rhs: MountDataObject) -> Bool {
         lhs.persistentID == rhs.persistentID &&
-        lhs.name == rhs.name &&
         lhs.user == rhs.user &&
         lhs.host == rhs.host &&
         lhs.share == rhs.share &&
+        lhs.summary == rhs.summary &&
         lhs.isNew == rhs.isNew &&
         lhs.pendingHostname == rhs.pendingHostname &&
         lhs.autoReconnect == rhs.autoReconnect
@@ -24,11 +24,11 @@ struct MountDataObject: Sendable, Identifiable, Equatable {
     var persistentID: PersistentIdentifier
     var id: UUID = UUID()
     var order: Int
-    var name: String
     var user: String
     var host: HostDataObject?
     var pendingHostname: String = ""
     var share: String
+    var summary: String?
     var autoReconnect: Bool
     // Object-specific:
     var isNew: Bool = false

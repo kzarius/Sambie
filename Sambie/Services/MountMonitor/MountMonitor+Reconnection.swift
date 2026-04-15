@@ -61,8 +61,6 @@ extension MountMonitor {
               mountData.autoReconnect,
               await ReconnectPolicy.isEligible(path: currentNetworkPath) else { return }
 
-        await logger("Attempting reconnect for \(mountData.name) (attempt \(attempt))", level: .info)
-
         // Attempt the reconnect:
         await MountClient(
             mountID: mountID,
@@ -83,7 +81,6 @@ extension MountMonitor {
               mountData.autoReconnect,
               await ReconnectPolicy.isEligible(path: currentNetworkPath) else { return }
 
-        await logger("Startup reconnect scheduled for \(mountData.name)", level: .info)
         await scheduleReconnect(for: mountID, attempt: 0)
     }
     
