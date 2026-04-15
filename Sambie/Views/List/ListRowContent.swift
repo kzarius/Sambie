@@ -35,11 +35,16 @@ struct ListRowContent: View {
                 ZombieIndicator(since: since)
             }
             
-            // Auto-reconnect indicator:
-            AutoReconnectButton(mount: self.mount)
-            
             Text("/\(self.mount.share)")
                 .foregroundStyle(Config.UI.Colors.text)
+            
+            // Summary block:
+            if let summary = self.mount.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             
             Spacer()
         }

@@ -42,18 +42,6 @@ struct EditorForm: View {
     
     var standardBlocksView: some View {
         Group {
-            // Profile name:
-            EditorFormBlock(
-                label: "Display Name",
-                icon: "person.fill"
-            ) {
-                TextField("", text: Binding(
-                    get: { self.actions.formData?.name ?? "" },
-                    set: { self.actions.formData?.name = $0 }
-                ))
-                    .modifier(LargeTextFieldStyle())
-            }
-            
             // Samba URL field:
             EditorFormBlock(
                 label: "URL",
@@ -75,6 +63,19 @@ struct EditorForm: View {
                     formData: self.$actions.formData,
                     password: self.$actions.password
                 )
+            }
+            
+            // Summary of the mount:
+            EditorFormBlock(
+                label: "Summary",
+                icon: "doc.text.magnifyingglass"
+            ) {
+                if let formData = Binding(self.$actions.formData) {
+                    TextField("", text: Binding(
+                        get: { formData.summary.wrappedValue ?? "" },
+                        set: { formData.summary.wrappedValue = $0 }
+                    ))
+                }
             }
         }
     }

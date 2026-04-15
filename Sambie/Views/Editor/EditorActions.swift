@@ -197,7 +197,9 @@ final class EditorActions {
     private func updateMountFromFormData() {
         guard let mount = self.mount, let formData = self.formData else { return }
         
-        mount.name = formData.name
+        if let summary = formData.summary?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            mount.summary = summary.isEmpty ? nil : summary
+        }
         mount.user = formData.user
         mount.share = formData.share
         mount.host = Host.findOrCreate(

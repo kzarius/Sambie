@@ -240,7 +240,6 @@ extension MountMonitor {
         guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
 
-        await logger("Unexpected disconnect for \(mountData.name) — scheduling reconnect", level: .info)
         // Reset reconnect attempts and schedule a reconnect:
         await self.stateManager.resetReconnectAttempts(for: mountID)
         await self.scheduleReconnect(for: mountID, attempt: 0)
@@ -279,7 +278,6 @@ extension MountMonitor {
         guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
 
-        await logger("🧟 Zombie unmount complete for \(mountData.name) — scheduling reconnect", level: .info)
         await self.stateManager.resetReconnectAttempts(for: mountID)
         await self.scheduleReconnect(for: mountID, attempt: 0)
     }

@@ -15,10 +15,10 @@ final class Mount {
     // MARK: - Properties
     var id: UUID        // A unique ID. Needed for the Keychain entries.
     var order: Int      // An integer to define ordering of mounts in the mount list.
-    var name: String    // A user-defined name for the mount.
     
     var user: String    // The username to connect with.
     var share: String   // The share name on the server.
+    var summary: String? // An optional description of the mount.
     
     @Relationship(deleteRule: .nullify)
     var host: Host?     // The Host group this mount belongs to.
@@ -38,16 +38,16 @@ final class Mount {
     init(
         id: UUID? = nil,
         order: Int = 0,
-        name: String = "Mt. Lonely",
         user: String = "guest",
         share: String = "share",
+        summary: String? = nil,
         isTemporary: Bool = false
     ) {
         self.id = id ?? UUID()
         self.order = order
-        self.name = name
         self.user = user
         self.share = share
+        self.summary = summary
         self.isTemporary = isTemporary
     }
     
@@ -58,11 +58,11 @@ final class Mount {
             persistentID: self.persistentModelID,
             id: self.id,
             order: self.order,
-            name: self.name,
             user: self.user,
             host: self.host?.toDataObject(),
             pendingHostname: self.host?.hostname ?? "",
             share: self.share,
+            summary: self.summary,
             autoReconnect: self.autoReconnect
         )
     }

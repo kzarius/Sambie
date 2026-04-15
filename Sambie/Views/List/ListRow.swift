@@ -71,10 +71,15 @@ struct ListRow: View {
                 ListRowContent(mount: controller.mount)
 
                 HStack(spacing: 8) {
+                    // Auto-reconnect indicator:
+                    AutoReconnectButton(mount: self.mount)
+                    
+                    // Open in Finder button, only if we have a valid mount point:
                     if controller.transientState.status == .connected {
                         OpenInFinderButton(mountPoint: controller.mountPoint)
                     }
 
+                    // Edit mount button:
                     EditMountButton {
                         self.editorState = controller.editMount()
                     }

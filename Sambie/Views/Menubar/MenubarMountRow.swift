@@ -40,7 +40,7 @@ struct MenuBarMountRow: View {
             HStack {
                 MenuBarStatusIcon(mountID: self.mount.persistentModelID)
                     
-                Text(self.mount.name)
+                Text("/\(self.mount.share)")
             }
         }
         // Disable until we have a connection to the mount:
