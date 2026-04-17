@@ -75,7 +75,7 @@ final class ListRowController {
             self.mountPoint = nil
             return
         }
-        if let path = try? await SambaMount.getMountPath(
+        if let path = try? await SambaMount.getPath(
             user: self.mount.user,
             host: self.mount.host?.hostname ?? "",
             share: self.mount.share

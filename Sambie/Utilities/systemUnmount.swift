@@ -1,5 +1,5 @@
 //
-//  diskutilUnmount.swift
+//  systemUnmount.swift
 //  Sambie
 //
 //  Created by Kaeo McKeague-Clark on 5/12/25.

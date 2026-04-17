@@ -15,7 +15,7 @@ extension MountMonitor {
     /// Cancels any existing scheduled task for this mount and creates a new one that fires after the calculated delay.
     func scheduleReconnect(for mountID: PersistentIdentifier, attempt: Int) async {
         // Cancel any existing scheduled reconnect for this mount:
-        scheduledReconnects[mountID]?.cancel()
+        self.scheduledReconnects[mountID]?.cancel()
 
         // Calculate the delay using exponential backoff:
         let baseDelay = await Config.Connection.Reconnection.baseDelay
@@ -25,10 +25,10 @@ extension MountMonitor {
         let delay = min(uncappedDelay, maxDelayInSeconds)
 
         await logger("Scheduled reconnect for mount in \(delay)s (attempt \(attempt))", level: .debug)
-        await stateManager.setReconnectAttempt(attempt, nextAt: Date().addingTimeInterval(delay), for: mountID)
+        await self.stateManager.setReconnectAttempt(attempt, nextAt: Date().addingTimeInterval(delay), for: mountID)
 
         // Create a task that fires after the delay:
-        scheduledReconnects[mountID] = Task { [weak self] in
+        self.scheduledReconnects[mountID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
             await self.attemptReconnect(for: mountID, attempt: attempt)
@@ -38,11 +38,13 @@ extension MountMonitor {
     /// Reset the backoff timer for a mount.
     func resetBackoff(for mountID: PersistentIdentifier) async {
         await logger("⚠️ resetBackoff called for a mount", level: .warning)
-        scheduledReconnects[mountID]?.cancel()
-        scheduledReconnects.removeValue(forKey: mountID)
-        await stateManager.resetReconnectAttempts(for: mountID)
+        self.scheduledReconnects[mountID]?.cancel()
+        self.scheduledReconnects.removeValue(forKey: mountID)
+        await self.stateManager.resetReconnectAttempts(for: mountID)
     }
     
+    
+    // MARK: - Private Methods
     /// Performs a single reconnect attempt for a mount.
     /// If the mount is no longer eligible or already connected, the task exits cleanly.
     /// If the reconnect fails, the next attempt is scheduled with incremented backoff.
@@ -50,28 +52,28 @@ extension MountMonitor {
         for mountID: PersistentIdentifier,
         attempt: Int
     ) async {
-        let state = await stateManager.getState(for: mountID)
+        let state = await self.stateManager.getState(for: mountID)
 
         // Bail if the mount is no longer disconnected or is being force-unmounted:
         guard state.status == ConnectionStatus.disconnected,
               !state.isForceUnmounting else { return }
 
         // Bail if auto-reconnect has been disabled or we're on an untrusted network:
-        guard let mountData = await accessor.getData(id: mountID),
+        guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect,
               await ReconnectPolicy.isEligible(path: currentNetworkPath) else { return }
 
         // Attempt the reconnect:
         await MountClient(
             mountID: mountID,
-            accessor: accessor,
-            stateManager: stateManager
+            accessor: self.accessor,
+            stateManager: self.stateManager
         ).mount()
 
         // Schedule the next attempt if still disconnected:
-        let newState = await stateManager.getState(for: mountID)
+        let newState = await self.stateManager.getState(for: mountID)
         if newState.status == ConnectionStatus.disconnected {
-            await scheduleReconnect(for: mountID, attempt: attempt + 1)
+            await self.scheduleReconnect(for: mountID, attempt: attempt + 1)
         }
     }
 
@@ -81,26 +83,26 @@ extension MountMonitor {
               mountData.autoReconnect,
               await ReconnectPolicy.isEligible(path: currentNetworkPath) else { return }
 
-        await scheduleReconnect(for: mountID, attempt: 0)
+        await self.scheduleReconnect(for: mountID, attempt: 0)
     }
     
     /// Called on network restore or cycle refresh — re-arms any disconnected auto-reconnect mounts that don't already have a pending task (e.g. their task was cancelled during network loss).
-    internal func processScheduledReconnects() async {
+    internal func doScheduledReconnects() async {
         let mountIDs = await accessor.getMountIDs().values.flatMap { $0 }
 
         for mountID in mountIDs {
             // Skip if there's already a live task for this mount:
-            guard scheduledReconnects[mountID] == nil ||
-                  scheduledReconnects[mountID]?.isCancelled == true else { continue }
+            guard self.scheduledReconnects[mountID] == nil ||
+                    self.scheduledReconnects[mountID]?.isCancelled == true else { continue }
 
-            let state = await stateManager.getState(for: mountID)
+            let state = await self.stateManager.getState(for: mountID)
             guard state.status == ConnectionStatus.disconnected,
                   !state.isForceUnmounting,
-                  let mountData = await accessor.getData(id: mountID),
+                  let mountData = await self.accessor.getData(id: mountID),
                   mountData.autoReconnect,
-                  await ReconnectPolicy.isEligible(path: currentNetworkPath) else { continue }
+                  await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { continue }
 
-            await scheduleReconnect(for: mountID, attempt: state.reconnectAttempts)
+            await self.scheduleReconnect(for: mountID, attempt: state.reconnectAttempts)
         }
     }
 }

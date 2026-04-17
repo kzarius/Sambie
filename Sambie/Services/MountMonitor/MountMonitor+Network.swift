@@ -12,11 +12,11 @@ import Network
 extension MountMonitor {
     /// Start monitoring network connectivity.
     internal func startNetworkMonitoring() async {
-        networkMonitor = NWPathMonitor()
-        networkMonitor?.pathUpdateHandler = { [weak self] path in
-            Task { await self?.processNetworkPathUpdate(path: path) }
+        self.networkMonitor = NWPathMonitor()
+        self.networkMonitor?.pathUpdateHandler = { [weak self] path in
+            Task { await self?.doNetworkPathUpdate(path: path) }
         }
-        networkMonitor?.start(queue: .global(qos: .utility))
+        self.networkMonitor?.start(queue: .global(qos: .utility))
         
         await logger("Network monitoring started", level: .debug)
     }
@@ -24,7 +24,7 @@ extension MountMonitor {
     /// Processes network path updates from NWPathMonitor.
     /// This method checks if the network has transitioned from unavailable to available, and if so, it runs the status cycle and processes scheduled reconnects immediately. On network restore, immediately triggers a full status cycle and reconnect pass rather than waiting for the next timer tick.
     /// - Parameter path: The updated NWPath from the monitor.
-    private func processNetworkPathUpdate(path: NWPath) async {
+    private func doNetworkPathUpdate(path: NWPath) async {
         let wasAvailable = self.isNetworkAvailable
         self.isNetworkAvailable = path.status == .satisfied
         self.currentNetworkPath = path
@@ -34,6 +34,6 @@ extension MountMonitor {
         
         await logger("⚡ Network restored — triggering immediate status cycle and reconnect pass", level: .info)
         await self.runStatusCycle()
-        await self.processScheduledReconnects()
+        await self.doScheduledReconnects()
     }
 }

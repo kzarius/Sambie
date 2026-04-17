@@ -19,7 +19,6 @@ actor MountMonitor {
     
     // Reconnection scheduling:
     internal var scheduledReconnects: [PersistentIdentifier: Task<Void, Never>] = [:]
-    internal var mountsNeedingZombieUnmount: [PersistentIdentifier] = []
     
     // Network monitoring:
     internal var networkMonitor: NWPathMonitor?
@@ -41,12 +40,12 @@ actor MountMonitor {
         await self.initializeAllStatuses()
         
         // Fire an immediate reconnect pass in the background without blocking init:
-        Task { await self.processScheduledReconnects() }
+        Task { await self.doScheduledReconnects() }
     }
     
     deinit {
-        monitoringTask?.cancel()
-        networkMonitor?.cancel()
+        self.monitoringTask?.cancel()
+        self.networkMonitor?.cancel()
     }
     
     
@@ -57,23 +56,32 @@ actor MountMonitor {
         
         self.monitoringTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self.checkInterval))
+                do {
+                    try await Task.sleep(for: .seconds(self.checkInterval))
+                } catch {
+                    // Exit on cancellation:
+                    break
+                }
                 guard !Task.isCancelled else { break }
-                await self.updateAllStatuses()
-                await self.processScheduledReconnects()
+                await self.runStatusCycle()
+                await self.doScheduledReconnects()
             }
+            self.monitoringTask = nil
         }
     }
+    
+    /// Stops the monitoring loop./
+    func stopMonitoring() { self.monitoringTask?.cancel() }
     
     /// Stops the monitoring loop.
     func cleanupMount(id mountID: PersistentIdentifier) async {
         // Cancel any pending reconnect task for this mount:
-        scheduledReconnects[mountID]?.cancel()
-        scheduledReconnects.removeValue(forKey: mountID)
+        self.scheduledReconnects[mountID]?.cancel()
+        self.scheduledReconnects.removeValue(forKey: mountID)
         
         // Clear its state:
-        await stateManager.clearErrors(for: mountID)
-        await stateManager.clearServerUnreachable(for: mountID)
-        await stateManager.resetReconnectAttempts(for: mountID)
+        await self.stateManager.clearErrors(for: mountID)
+        await self.stateManager.clearServerUnreachable(for: mountID)
+        await self.stateManager.resetReconnectAttempts(for: mountID)
     }
 }

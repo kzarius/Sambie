@@ -105,7 +105,7 @@ actor MountClient: Sendable {
         
         // If the mount is already unmounted, return early:
         do {
-            try await SambaMount.checkForMountInSystem(
+            try await SambaMount.checkInSystem(
                 user: mountData.user,
                 host: hostData.hostname,
                 share: mountData.share
@@ -116,7 +116,7 @@ actor MountClient: Sendable {
         }
         
         // Get the mount point for the share:
-        let mountPoint = try await SambaMount.getMountPath(
+        let mountPoint = try await SambaMount.getPath(
             user: mountData.user,
             host: hostData.hostname,
             share: mountData.share
@@ -147,7 +147,7 @@ actor MountClient: Sendable {
             
             await logger("Checking if mount `\(String(describing: SambaURL.create(from: mountData)))` is mounted...", level: .debug)
             
-            try await SambaMount.checkForMountInSystem(
+            try await SambaMount.checkInSystem(
                 user: mountData.user,
                 host: hostData.hostname,
                 share: mountData.share
@@ -185,7 +185,7 @@ actor MountClient: Sendable {
             }
 
             // Get the mount point for the share:
-            let mountPoint = try await SambaMount.getMountPath(
+            let mountPoint = try await SambaMount.getPath(
                 user: mountData.user,
                 host: hostData.hostname,
                 share: mountData.share

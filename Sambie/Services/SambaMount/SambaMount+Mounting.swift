@@ -13,7 +13,7 @@ extension SambaMount {
     /// Mount the share via NetFS.
     /// - Parameter mountData: The mount data object containing connection details.
     static func mountShare(mountData: MountDataObject) async throws {
-        let urlString = try await self.buildSMBURL(from: mountData)
+        let urlString = try await self.buildURL(from: mountData)
         let password = await self.retrievePassword(for: mountData)
         let mountPath = try await self.performMount(
             urlString: urlString,
@@ -32,7 +32,7 @@ extension SambaMount {
     /// - Returns: A string representation of the SMB URL.
     /// - Throws: `ClientError.mountFailed` if the URL cannot be constructed.
     @MainActor
-    private static func buildSMBURL(from mountData: MountDataObject) throws -> String {
+    private static func buildURL(from mountData: MountDataObject) throws -> String {
         let url = SambaURL.create(from: mountData)
         guard !url.absoluteString.isEmpty else {
             throw ClientError.mountFailed(reason: "Failed to construct SMB URL.")
@@ -95,10 +95,13 @@ extension SambaMount {
         let paths: [String] = nsArray.compactMap { element in
             // If the element is already a String, return it directly.
             if let stringPath = element as? String { return stringPath }
+            
             // If the element is a URL, extract its path.
             if let url = element as? URL { return url.path }
+            
             // If the element is an NSURL, cast to URL and extract its path.
             if let nsurl = element as? NSURL { return (nsurl as URL).path }
+            
             // If the element is none of the above, ignore it.
             return nil
         }

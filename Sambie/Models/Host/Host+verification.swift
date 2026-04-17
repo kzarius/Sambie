@@ -55,6 +55,7 @@ extension Host {
             throw ConfigurationError.invalidPort(port: port)
         }
 
+        await logger("Checking port accessibility for host: \(host), port: \(port)")
         let result = try await Subprocess.run(
             .name("nc"),
             arguments: ["-z", "-G", String(Int(timeout)), host, String(port)],

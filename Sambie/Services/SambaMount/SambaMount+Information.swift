@@ -10,7 +10,39 @@ import Foundation
 
 extension SambaMount {
     
-    // MARK: - Mount Information
+    // MARK: - Public Methods
+    /// Checks if a mount is currently active in the system.
+    /// - Parameters:
+    ///   - user: The username used for the mount.
+    ///   - host: The hostname or IP address of the server.
+    ///   - share: The share name to check for.
+    /// - Throws: `ClientError.notFound` if the mount is not found.
+    static func checkInSystem(
+        user: String,
+        host: String,
+        share: String
+    ) async throws {
+        _ = try await self.findMount(user: user, host: host, share: share)
+    }
+    
+    /// Retrieves the mount path for a specific mount.
+    /// - Parameters:
+    ///   - user: The username used for the mount.
+    ///   - host: The hostname or IP address of the server.
+    ///   - share: The share name to check for.
+    /// - Returns: The mount path (e.g., `/Volumes/share`).
+    /// - Throws: `ClientError.notFound` if the mount is not found.
+    static func getPath(
+        user: String,
+        host: String,
+        share: String
+    ) async throws -> String {
+        let mount = try await self.findMount(user: user, host: host, share: share)
+        return mount.mountPath
+    }
+    
+    
+    // MARK: - Private Methods
     /// Searches for a specific SMB mount in the system and returns its parsed information.
     /// - Parameters:
     ///   - user: The username used for the mount.
@@ -18,11 +50,12 @@ extension SambaMount {
     ///   - share: The share name to check for.
     /// - Returns: A `ParsedSMBMount` if the mount is found.
     /// - Throws: `ClientError.notFound` if the mount is not found or unable to retrieve mount information.
-    private static func parseSMBMount(
+    private static func findMount(
         user: String,
         host: String,
         share: String
     ) async throws -> ParsedSMBMount {
+        // Run `mount` to gather all mounts:
         let result = try await Subprocess.run(
             .name("mount"),
             output: .string(limit: 1_000_000)
@@ -37,7 +70,6 @@ extension SambaMount {
         guard let line = output
         .split(separator: "\n")
         .first(where: { line in
-            
             // Must be an SMB mount:
             guard line.contains("smbfs") else { return false }
         
@@ -64,40 +96,11 @@ extension SambaMount {
         let pathEnd = parenRange.lowerBound
         let mountPath = String(line[pathStart..<pathEnd]).trimmingCharacters(in: .whitespaces)
         
+        // Return a ParsedSMBMount with the extracted information:
         return ParsedSMBMount(
             sourceURL: sourceURL,
             mountPath: mountPath,
             fullLine: line
         )
-    }
-
-    /// Checks if a mount is currently active in the system.
-    /// - Parameters:
-    ///   - user: The username used for the mount.
-    ///   - host: The hostname or IP address of the server.
-    ///   - share: The share name to check for.
-    /// - Throws: `ClientError.notFound` if the mount is not found.
-    static func checkForMountInSystem(
-        user: String,
-        host: String,
-        share: String
-    ) async throws {
-        _ = try await parseSMBMount(user: user, host: host, share: share)
-    }
-
-    /// Retrieves the mount path for a specific mount.
-    /// - Parameters:
-    ///   - user: The username used for the mount.
-    ///   - host: The hostname or IP address of the server.
-    ///   - share: The share name to check for.
-    /// - Returns: The mount path (e.g., `/Volumes/share`).
-    /// - Throws: `ClientError.notFound` if the mount is not found.
-    static func getMountPath(
-        user: String,
-        host: String,
-        share: String
-    ) async throws -> String {
-        let mount = try await parseSMBMount(user: user, host: host, share: share)
-        return mount.mountPath
     }
 }
