@@ -81,6 +81,14 @@ actor MountAccessor {
         mountData.isNew = mount.isNew(in: self.modelContext)
         return mountData
     }
+    
+    func summarize(id mountID: PersistentIdentifier) async -> String {
+        guard let mountData = await self.getData(id: mountID) else {
+            Task { await logger("Attempted to summarize a mount that could not be found.", level: .debug) }
+            return ""
+        }
+        return await SambaURL.create(from: mountData).absoluteString
+    }
 
     /// Deletes a Mount by its PersistentIdentifier.
     func deleteMount(id mountID: PersistentIdentifier) async throws {

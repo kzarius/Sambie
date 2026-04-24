@@ -24,20 +24,27 @@ extension MountMonitor {
         let maxDelayInSeconds = await Config.Connection.Reconnection.maxMinutesDelay * 60.0
         let delay = min(uncappedDelay, maxDelayInSeconds)
 
-        await logger("Scheduled reconnect for mount in \(delay)s (attempt \(attempt))", level: .debug)
-        await self.stateManager.setReconnectAttempt(attempt, nextAt: Date().addingTimeInterval(delay), for: mountID)
+        await logger("[scheduleReconnect] Scheduled reconnect for `\(self.accessor.summarize(id: mountID))` in \(delay)s (attempt \(attempt))", level: .debug)
+        await self.stateManager.setReconnectAttempt(
+            attempt,
+            nextAt: Date().addingTimeInterval(delay),
+            for: mountID
+        )
 
         // Create a task that fires after the delay:
         self.scheduledReconnects[mountID] = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self else { return }
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch { return }
+            guard let self else { return }
             await self.attemptReconnect(for: mountID, attempt: attempt)
+            await self.clearScheduledReconnect(for: mountID)
         }
     }
     
     /// Reset the backoff timer for a mount.
     func resetBackoff(for mountID: PersistentIdentifier) async {
-        await logger("⚠️ resetBackoff called for a mount", level: .warning)
+        await logger("⚠️ resetBackoff called for \(self.accessor.summarize(id: mountID))", level: .warning)
         self.scheduledReconnects[mountID]?.cancel()
         self.scheduledReconnects.removeValue(forKey: mountID)
         await self.stateManager.resetReconnectAttempts(for: mountID)
@@ -52,7 +59,10 @@ extension MountMonitor {
         for mountID: PersistentIdentifier,
         attempt: Int
     ) async {
+        let mountSummary = await self.accessor.summarize(id: mountID) // For logs.
         let state = await self.stateManager.getState(for: mountID)
+        
+        await logger("[attemptReconnect] Attempting a reconnect of \(mountSummary) - (attempt \(attempt))", level: .debug)
 
         // Bail if the mount is no longer disconnected or is being force-unmounted:
         guard state.status == ConnectionStatus.disconnected,
@@ -69,12 +79,25 @@ extension MountMonitor {
             accessor: self.accessor,
             stateManager: self.stateManager
         ).mount()
+        
+        // If the task was cancelled while the mount was in-flight (e.g. user cancelled during .connecting), don't reschedule — leave autoReconnect intact for future cycles:
+        guard !Task.isCancelled else {
+            await logger("[attemptReconnect] Reconnect task for `\(mountSummary)` was cancelled during an attempt, not rescheduling.", level: .info)
+            return
+        }
 
         // Schedule the next attempt if still disconnected:
         let newState = await self.stateManager.getState(for: mountID)
         if newState.status == ConnectionStatus.disconnected {
+            await logger("[attemptReconnect] Reconnect attempt failed, scheduling next attempt for `\(mountSummary)`", level: .info)
             await self.scheduleReconnect(for: mountID, attempt: attempt + 1)
         }
+    }
+    
+    /// Removes a completed (non-cancelled) reconnect task entry.
+    internal func clearScheduledReconnect(for mountID: PersistentIdentifier) {
+        guard let task = self.scheduledReconnects[mountID], !task.isCancelled else { return }
+        self.scheduledReconnects.removeValue(forKey: mountID)
     }
 
     /// Immediately attempts to reconnect all auto-reconnect mounts that are disconnected at startup.

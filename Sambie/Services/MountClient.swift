@@ -38,8 +38,9 @@ actor MountClient: Sendable {
     
     // MARK: - Public Methods
     /// Attempt to mount a samba drive to a directory.
+    /// - Parameter isAutoReconnect: A boolean indicating if this mount attempt is part of an auto-reconnect process. This can be used to adjust logging or error handling behavior if needed.
     /// - Note: This function updates the mount's state as it progresses.
-    func mount() async {
+    func mount(isAutoReconnect: Bool = false) async {
         self.cancelled = false
         await self.updateState(status: .connecting)
         do {
@@ -47,7 +48,11 @@ actor MountClient: Sendable {
         } catch {
             guard !self.cancelled else { return }
             let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
-            await self.updateState(status: status, errors: [error])
+            await self.updateState(
+                status: status,
+                errors: isAutoReconnect ? [] : [error],
+                preserveErrors: isAutoReconnect
+            )
             return
         }
         
@@ -86,6 +91,8 @@ actor MountClient: Sendable {
     func doMount() async throws {
         // If the mount is already connected, return early:
         if await self.isMounted() { return }
+        
+        await logger("Mounting \(self.accessor.summarize(id: mountID))", level: .debug)
         
         // Mount the share:
         _ = try await SambaMount(
@@ -145,16 +152,12 @@ actor MountClient: Sendable {
                 throw ClientError.notFound
             }
             
-            await logger("Checking if mount `\(String(describing: SambaURL.create(from: mountData)))` is mounted...", level: .debug)
-            
             try await SambaMount.checkInSystem(
                 user: mountData.user,
                 host: hostData.hostname,
                 share: mountData.share
             )
-            await logger(" - ✅ Mount is mounted.", level: .debug)
         } catch {
-            await logger(" - ❌ Mount is not mounted.", level: .debug)
             return false
         }
         
@@ -175,11 +178,11 @@ actor MountClient: Sendable {
         await self.stateManager.setForceUnmounting(true, for: self.mountID)
         await self.updateState(status: .disconnecting)
         do {
-            await logger("Attempting to force unmount suspected zombie mount with ID \(self.mountID)", level: .warning)
+            await logger("[forceUnmountZombie] 🧟Attempting to force unmount suspected zombie mount with ID \(self.accessor.summarize(id: self.mountID))", level: .warning)
             
             // Retrieve mount data:
             guard let mountData = await self.accessor.getData(id: self.mountID), let hostData = mountData.host else {
-                await logger("🧟 Attempted to force unmount zombie, but mount data could not be retrieved.", level: .error)
+                await logger("[forceUnmountZombie] 🧟 Attempted to force unmount zombie, but mount data could not be retrieved.", level: .error)
                 await self.updateState(status: .connected)
                 return
             }
@@ -194,7 +197,7 @@ actor MountClient: Sendable {
             // Force unmount:
             try await self.forceUnmount(path: mountPoint)
             await self.updateState(status: .disconnected)
-            await logger("🧟 Successfully force unmounted suspected zombie mount with ID \(self.mountID)", level: .warning)
+            await logger("[forceUnmountZombie] 🧟 Successfully force unmounted suspected zombie mount with ID \(self.accessor.summarize(id: self.mountID))", level: .warning)
         } catch {
             let status = await self.isMounted() ? ConnectionStatus.connected : ConnectionStatus.disconnected
             await self.updateState(status: status, errors: [error])
@@ -225,16 +228,24 @@ actor MountClient: Sendable {
     }
     
     /// Safely access the mount and update its state.
-    private func updateState(status: ConnectionStatus, errors: [Error] = []) async {
+    private func updateState(
+        status: ConnectionStatus,
+        errors: [Error] = [],
+        preserveErrors: Bool = false
+    ) async {
         // Ensure the mount still exists before updating state:
         guard await self.accessor.exists(id: self.mountID) else {
-            await logger("Mount with ID \(self.mountID) no longer exists, cannot update state.", level: .error)
+            await logger("[updateState] Mount with ID \(self.accessor.summarize(id: self.mountID)) no longer exists, cannot update state.", level: .error)
             return
         }
         
         // Update transient state via manager:
         await self.stateManager.setStatus(status, for: self.mountID)
-        if errors.isEmpty {
+        
+        // preserveErrors is used to prevent overwriting errors during auto-reconnect:
+        if preserveErrors {
+            return
+        } else if errors.isEmpty {
             await self.stateManager.clearErrors(for: self.mountID)
         } else {
             await self.stateManager.setErrors(

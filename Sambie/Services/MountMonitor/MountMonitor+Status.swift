@@ -38,19 +38,29 @@ extension MountMonitor {
             
             // Check if the status has changed, and update it if so:
             if actualStatus != recordedStatus {
+                await logger("[updateAllStatuses] Mount `\(self.accessor.summarize(id: mountID))` status changed: \(recordedStatus) -> \(actualStatus)", level: .info)
                 await self.stateManager.setStatus(actualStatus, for: mountID)
                 
-                // If it was unexpectedly disconnected, trigger the flow:
+                // 1.) If it was unexpectedly disconnected, trigger the flow:
                 if actualStatus == .disconnected, recordedStatus == .connected {
                     let state = await self.stateManager.getState(for: mountID)
-                    guard !state.isForceUnmounting else { continue }
-                    await self.handleUnexpectedDisconnect(for: mountID)
+                    
+                    // Skip if this was a zombie force-unmount:
+                    if !state.isForceUnmounting, state.serverUnreachableSince == nil {
+                        await self.handleUnexpectedDisconnect(for: mountID)
+                    }
                 }
                 
-                // If the mount is now disconnected, schedule a reconnect if needed:
+                // 2.) If the mount is not connected, update the status:
                 if actualStatus != .connected {
                     await self.stateManager.setStatus(.disconnected, for: mountID)
-                    await self.scheduleStartupReconnect(for: mountID)
+                    
+                // 3.) Otherwise, the mount is connected and we should clear any existing errors and reset reconnect attempts:
+                } else {
+                    await self.stateManager.setStatus(.connected, for: mountID)
+                    await self.stateManager.clearErrors(for: mountID)
+                    await self.stateManager.resetReconnectAttempts(for: mountID)
+                    self.clearScheduledReconnect(for: mountID)
                 }
             }
         }
@@ -221,7 +231,7 @@ extension MountMonitor {
 
         guard elapsed >= zombieTimeout, !state.isForceUnmounting else { return nil }
 
-        await logger("🧟 Mount \(mountID) has been unreachable for \(Int(elapsed))s — queuing zombie unmount", level: .warning)
+        await logger("[prepareZombieUnmount] 🧟 Mount \(self.accessor.summarize(id: mountID)) has been unreachable for \(Int(elapsed))s — queuing zombie unmount", level: .warning)
         return mountID
     }
 
@@ -240,6 +250,7 @@ extension MountMonitor {
         // Check if auto-reconnect is enabled and we're on a trusted network before scheduling a reconnect:
         guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
+        await logger("[runZombieUnmount] Scheduling reconnect for mount \(self.accessor.summarize(id: mountID)) after zombie unmount. autoReconnect: \(mountData.autoReconnect)", level: .info)
 
         await self.stateManager.resetReconnectAttempts(for: mountID)
         await self.scheduleReconnect(for: mountID, attempt: 0)

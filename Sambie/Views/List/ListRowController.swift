@@ -17,6 +17,7 @@ final class ListRowController {
     let mount: Mount
     private let stateManager: MountStateManager
     private let accessor: MountAccessor
+    private let monitor: MountMonitor
 
     private(set) var mountPoint: URL? = nil
     private(set) var mountConnection: MountClient?
@@ -37,10 +38,16 @@ final class ListRowController {
 
     // MARK: - Initializer
     /// Initializes the controller with the necessary dependencies.
-    init(mount: Mount, stateManager: MountStateManager, accessor: MountAccessor) {
+    init(
+        mount: Mount,
+        stateManager: MountStateManager,
+        accessor: MountAccessor,
+        monitor: MountMonitor
+    ) {
         self.mount = mount
         self.stateManager = stateManager
         self.accessor = accessor
+        self.monitor = monitor
     }
 
 
@@ -64,6 +71,7 @@ final class ListRowController {
             await self.mountConnection?.mount()
         case .connecting:
             await self.mountConnection?.cancel()
+            await self.monitor.resetBackoff(for: self.mount.persistentModelID)
         default:
             break
         }

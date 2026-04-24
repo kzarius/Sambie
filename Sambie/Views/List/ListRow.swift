@@ -18,6 +18,7 @@ struct ListRow: View {
     @Binding var editorState: EditorState
     @Environment(\.modelContext) private var modelContext
     @Environment(\.mountAccessor) private var accessor
+    @Environment(\.mountMonitor) private var monitor
     @Environment(MountStateManager.self) private var stateManager
     @State private var controller: ListRowController?
     
@@ -43,16 +44,15 @@ struct ListRow: View {
     var body: some View {
         ZStack {
             Color.clear
-                .task {
+                .task(id: monitor.map { ObjectIdentifier($0) }) {
                     // Fetch the accessor from the environment:
-                    guard let accessor else {
-                        fatalError("MountAccessor not found in environment.")
-                    }
+                    guard let accessor, let monitor else { return }
                     
                     let vm = ListRowController(
                         mount: self.mount,
                         stateManager: self.stateManager,
-                        accessor: accessor
+                        accessor: accessor,
+                        monitor: monitor
                     )
                     await vm.initialize()
                     self.controller = vm

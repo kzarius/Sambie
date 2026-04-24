@@ -128,16 +128,16 @@ enum ReconnectPolicy {
         }
         
         // Diagnostic dump:
-        logger("""
-            ReconnectPolicy: isEligible diagnostics —
-              path.status:          \(path.status)
-              isExpensive:          \(path.isExpensive)
-              isConstrained:        \(path.isConstrained)
-              usesWifi:             \(path.usesInterfaceType(.wifi))
-              usesEthernet:         \(path.usesInterfaceType(.wiredEthernet))
-              security:             \(await self.getWifiSecurity(path: path) ?? "unknown")
-              VPN:                  \(await self.isVPNRouteActive() ? "active" : "inactive")
-            """, level: .debug)
+//        logger("""
+//            ReconnectPolicy: isEligible diagnostics —
+//              path.status:          \(path.status)
+//              isExpensive:          \(path.isExpensive)
+//              isConstrained:        \(path.isConstrained)
+//              usesWifi:             \(path.usesInterfaceType(.wifi))
+//              usesEthernet:         \(path.usesInterfaceType(.wiredEthernet))
+//              security:             \(await self.getWifiSecurity(path: path) ?? "unknown")
+//              VPN:                  \(await self.isVPNRouteActive() ? "active" : "inactive")
+//            """, level: .debug)
         
         // Ethernet bypass — always trust ethernet if the setting is enabled:
         if Settings.Reconnection.alwaysTrustEthernet, self.isOnEthernet(path: path) {

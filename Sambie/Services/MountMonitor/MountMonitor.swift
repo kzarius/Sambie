@@ -2,6 +2,12 @@
 //  MountMonitor.swift
 //  Sambie
 //
+// FLOW:
+// - On init, start network monitoring and initialize all mount statuses in parallel.
+//   - Used to ensure we have network status before checking mounts, and to speed up initial status checks.
+// - startMonitoring(): Called when mounts are loaded. Start a monitoring loop that runs every `checkInterval` seconds to:
+//   - Check the status of all mounts and update their states.
+//
 //  Created by Kaeo McKeague-Clark on 10/10/25.
 //
 
@@ -64,7 +70,6 @@ actor MountMonitor {
                 }
                 guard !Task.isCancelled else { break }
                 await self.runStatusCycle()
-                await self.doScheduledReconnects()
             }
             self.monitoringTask = nil
         }

@@ -15,12 +15,17 @@ extension SambaMount {
     static func mountShare(mountData: MountDataObject) async throws {
         let urlString = try await self.buildURL(from: mountData)
         let password = await self.retrievePassword(for: mountData)
-        let mountPath = try await self.performMount(
-            urlString: urlString,
-            username: mountData.user,
-            password: password
-        )
-
+        let timeout = await Config.Connection.connectTimeout
+        
+        // Perform the mount with a timeout to prevent hanging:
+        let mountPath = try await withTimeout(seconds: timeout) {
+            try await self.performMount(
+                urlString: urlString,
+                username: mountData.user,
+                password: password
+            )
+        }
+        
         await logger("NetFS mounted at: \(mountPath)", level: .info)
     }
 
