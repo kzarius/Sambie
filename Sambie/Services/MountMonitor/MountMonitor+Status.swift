@@ -10,13 +10,14 @@ import SwiftData
 
 /// Status Updates Extension - Handles all logic related to checking and updating the status of mounts.
 extension MountMonitor {
+    
     /// Initializes the status of all mounts in parallel during actor initialization.
     internal func initializeAllStatuses() async {
-        // Get all mount IDs from the accessor:
-        let statuses = await self.getAllMountStatuses()
-        
-        // Do the checks:
-        for (mountID, _, actualStatus) in statuses {
+        // Use the accessor's new closure method to handle concurrency:
+        await self.accessor.getMountIDs(concurrently: true) { mountID in
+            
+            let (_, _, actualStatus) = await self.fetchMountStatus(for: mountID)
+            
             if actualStatus == .connected {
                 await self.stateManager.setStatus(.connected, for: mountID)
             } else {
@@ -26,70 +27,136 @@ extension MountMonitor {
         }
     }
     
-    /// Sets the initial connection status for all mounts in parallel during actor startup.
-    /// Only determines if each mount is already active in the OS — no reconnect or zombie logic.
-    internal func updateAllStatuses() async {
-        // Get all mount IDs from the accessor:
-        let statuses = await self.getAllMountStatuses()
+    /// The main periodic status cycle. Fetches all mounts grouped by host, checks host reachability, and updates individual mount statuses. Called by the monitoring timer on each tick.
+    internal func runStatusCycle() async {
+        // Get all mounts grouped by host:
+        let mountsByHost = await self.accessor.getMountIDs()
         
-        for (mountID, recordedStatus, actualStatus) in statuses {
-            // Make sure it still exists before updating:
-            guard await self.accessor.exists(id: mountID) else { continue }
-            
-            // Check if the status has changed, and update it if so:
-            if actualStatus != recordedStatus {
-                await logger("[updateAllStatuses] Mount `\(self.accessor.summarize(id: mountID))` status changed: \(recordedStatus) -> \(actualStatus)", level: .info)
-                await self.stateManager.setStatus(actualStatus, for: mountID)
-                
-                // 1.) If it was unexpectedly disconnected, trigger the flow:
-                if actualStatus == .disconnected, recordedStatus == .connected {
-                    let state = await self.stateManager.getState(for: mountID)
-                    
-                    // Skip if this was a zombie force-unmount:
-                    if !state.isForceUnmounting, state.serverUnreachableSince == nil {
-                        await self.handleUnexpectedDisconnect(for: mountID)
-                    }
-                }
-                
-                // 2.) If the mount is not connected, update the status:
-                if actualStatus != .connected {
-                    await self.stateManager.setStatus(.disconnected, for: mountID)
-                    
-                // 3.) Otherwise, the mount is connected and we should clear any existing errors and reset reconnect attempts:
-                } else {
-                    await self.stateManager.setStatus(.connected, for: mountID)
-                    await self.stateManager.clearErrors(for: mountID)
-                    await self.stateManager.resetReconnectAttempts(for: mountID)
-                    self.clearScheduledReconnect(for: mountID)
+        // Go through each host group in parallel:
+        await withTaskGroup(of: Void.self) { group in
+            for (hostID, mountIDs) in mountsByHost {
+                group.addTask {
+                    // Check host reachability and mount statuses:
+                    await self.processHostGroup(hostID: hostID, mountIDs: mountIDs)
                 }
             }
         }
     }
     
-    /// The main periodic status cycle. Runs both mount-level and host-level checks concurrently.
-    /// Called by the monitoring timer on each tick.
-    internal func runStatusCycle() async {
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.updateAllStatuses() }
-            group.addTask { await self.checkAllHostReachability() }
+    /// Processes a single host group: checks host reachability, then processes the OS-level status of each of its mounts.
+    private func processHostGroup(hostID: PersistentIdentifier, mountIDs: [PersistentIdentifier]) async {
+        
+        // 1. Check reachability of the underlying host port:
+        var isReachable = false
+        if let hostData = await self.accessor.getHostData(for: hostID) {
+            do {
+                try await Host.checkPortAccessible(host: hostData.hostname, port: hostData.port)
+                isReachable = true
+                
+            // Port is closed or network is down:
+            } catch {
+                isReachable = false
+            }
         }
-    }
-    
-    /// Fetches the recorded and actual OS-level mount status for all mounts in parallel.
-    private func getAllMountStatuses() async -> [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] {
-        // Get all mount IDs from the accessor:
-        let mountIDs = await self.accessor.getMountIDs().values.flatMap { $0 }
-
-        var results: [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] = []
+        
+        // 2. Check the OS-level status for all mounts under this host in parallel:
+        var mountStatuses: [(PersistentIdentifier, ConnectionStatus, ConnectionStatus)] = []
         await withTaskGroup(of: (PersistentIdentifier, ConnectionStatus, ConnectionStatus).self) { group in
+            
             for mountID in mountIDs {
+                // Returns (mountID, recordedStatus, actualStatus) for each mount:
                 group.addTask { await self.fetchMountStatus(for: mountID) }
             }
-            for await result in group {
-                results.append(result)
+            
+            // Collect the results:
+            for await statusTuple in group {
+                mountStatuses.append(statusTuple)
             }
         }
-        return results
+        
+        // 3. Process each mount given the host's reachability and its actual OS status:
+        for (mountID, recordedStatus, actualStatus) in mountStatuses {
+            await self.processMountStatus(
+                mountID: mountID,
+                recordedStatus: recordedStatus,
+                actualStatus: actualStatus,
+                isHostReachable: isReachable
+            )
+        }
+    }
+
+    /// Updates state, handles unexpected disconnects, and manages zombie unmounts for a single mount.
+    private func processMountStatus(
+        mountID: PersistentIdentifier,
+        recordedStatus: ConnectionStatus,
+        actualStatus: ConnectionStatus,
+        isHostReachable: Bool
+    ) async {
+        // Ensure the mount still exists:
+        guard await self.accessor.exists(id: mountID) else { return }
+
+        // 1. Check for immediate OS-level status changes:
+        if actualStatus != recordedStatus {
+            let summary = await self.accessor.summarize(id: mountID)
+            await logger("[runStatusCycle] Mount `\(summary)` status changed: \(recordedStatus) -> \(actualStatus)", level: .info)
+            await self.stateManager.setStatus(actualStatus, for: mountID)
+            
+            // Handle unexpected OS disconnects:
+            if actualStatus == .disconnected, recordedStatus == .connected {
+                let state = await self.stateManager.getState(for: mountID)
+                
+                // Skip scheduling if this was a zombie force-unmount:
+                if !state.isForceUnmounting, state.serverUnreachableSince == nil {
+                    await self.handleUnexpectedDisconnect(for: mountID)
+                }
+            }
+            
+            if actualStatus != .connected {
+                await self.stateManager.setStatus(.disconnected, for: mountID)
+            }
+        }
+        
+        // 2. Handle ongoing states (Healthy Connected vs. Zombie):
+        if actualStatus == .connected {
+            if isHostReachable {
+                
+                // Healthy: Host is reachable, and OS shows it as connected:
+                await self.stateManager.setStatus(.connected, for: mountID)
+                await self.stateManager.clearErrors(for: mountID)
+                await self.stateManager.resetReconnectAttempts(for: mountID)
+                
+                // Clears unreachable state if host recovers:
+                await self.stateManager.clearServerUnreachable(for: mountID)
+                self.clearScheduledReconnect(for: mountID)
+                
+            // Host is unreachable but OS still shows it as connected (most likely a zombie mount):
+            } else {
+                let state = await self.stateManager.getState(for: mountID)
+                
+                // Prevent parallel force-unmounts:
+                guard !state.isForceUnmounting else { return }
+                // Stamps the current time if not already set:
+                await self.stateManager.markServerUnreachable(for: mountID)
+                
+                let updatedState = await self.stateManager.getState(for: mountID)
+                if let unreachableSince = updatedState.serverUnreachableSince {
+                    let elapsed = Date().timeIntervalSince(unreachableSince)
+                    let zombieTimeout = await Config.Connection.mountTimeout
+                    
+                    // The elapsed time exceeds the zombie timeout, so we consider it a zombie and force unmount it:
+                    if elapsed >= zombieTimeout {
+                        let summary = await self.accessor.summarize(id: mountID)
+                        await logger("[runStatusCycle] 🧟 Mount `\(summary)` unreachable for \(Int(elapsed))s (networkDown: \(!self.isNetworkAvailable)) — queuing zombie unmount", level: .warning)
+                        
+                        Task { await self.runZombieUnmount(for: mountID) }
+                    }
+                }
+            }
+            
+        // Not connected:
+        } else {
+            await self.stateManager.clearServerUnreachable(for: mountID)
+        }
     }
     
     /// Checks the OS-level mount status for a single mount.
@@ -119,90 +186,7 @@ extension MountMonitor {
             isMounted ? .connected : .disconnected
         )
     }
-    
-    // MARK: - Host-Level Reachability Checks
-    /// Checks port reachability for each host that has at least one connected mount.
-    /// If a host is unreachable, all of its connected mounts are pushed into zombie handling.
-    private func checkAllHostReachability() async {
-        var connectedHosts: [(PersistentIdentifier, [PersistentIdentifier])] = []
-        var mountsNeedingZombieUnmount: [PersistentIdentifier] = []
-        // Get all mounts grouped by host:
-        let mountsByHost = await self.accessor.getMountIDs()
 
-        // Collect hosts that have at least one connected mount:
-        for (hostID, mountIDs) in mountsByHost {
-            let connectedMounts = await self.connectedMounts(from: mountIDs)
-            guard !connectedMounts.isEmpty else { continue }
-            connectedHosts.append((hostID, connectedMounts))
-        }
-
-        // Check each host's reachability in parallel:
-        await withTaskGroup(of: [PersistentIdentifier].self) { group in
-            for (hostID, connectedMountIDs) in connectedHosts {
-                group.addTask {
-                    // Returns a list of mount IDs if the host is unresponsive.
-                    await self.checkHostForBites(
-                        hostID: hostID,
-                        connectedMountIDs: connectedMountIDs
-                    )
-                }
-            }
-            
-            // zombieMountIDs is the collection of returned mountIDs from checkHostForBites() in the group task.
-            for await zombieMountIDs in group {
-                mountsNeedingZombieUnmount.append(contentsOf: zombieMountIDs)
-            }
-        }
-
-        // Run zombie unmounts in parallel:
-        await withTaskGroup(of: Void.self) { group in
-            for mountID in mountsNeedingZombieUnmount {
-                group.addTask { await self.runZombieUnmount(for: mountID) }
-            }
-        }
-    }
-
-    /// Checks a single host's port reachability and returns any mount IDs that need zombie unmounting.
-    private func checkHostForBites(
-        hostID: PersistentIdentifier,
-        connectedMountIDs: [PersistentIdentifier]
-    ) async -> [PersistentIdentifier] {
-        guard let hostData = await self.accessor.getHostData(for: hostID) else { return [] }
-
-        // Check if the host is reachable:
-        let isReachable = await (try? Host.checkPortAccessible(
-            host: hostData.hostname,
-            port: hostData.port
-        )) != nil
-
-        // If it's reachable, clear any existing unreachable status and return:
-        if isReachable {
-            for mountID in connectedMountIDs {
-                await self.stateManager.clearServerUnreachable(for: mountID)
-            }
-            return []
-        }
-
-        // If it's not reachable, prepare zombie unmounts for all connected mounts:
-        var zombieIDs: [PersistentIdentifier] = []
-        for mountID in connectedMountIDs {
-            if let id = await self.prepareZombieUnmount(for: mountID) {
-                zombieIDs.append(id)
-            }
-        }
-        return zombieIDs
-    }
-
-    /// Returns the subset of the given mount IDs that are currently connected.
-    private func connectedMounts(from mountIDs: [PersistentIdentifier]) async -> [PersistentIdentifier] {
-        var connected: [PersistentIdentifier] = []
-        for mountID in mountIDs {
-            let status = await self.stateManager.getState(for: mountID).status
-            if status == .connected { connected.append(mountID) }
-        }
-        return connected
-    }
-    
     /// Handles auto-reconnect logic for an unexpectedly disconnected mount.
     /// Marks the mount as unexpectedly disconnected, which will trigger the reconnect UI, and schedules the first reconnect attempt.
     private func handleUnexpectedDisconnect(for mountID: PersistentIdentifier) async {
@@ -218,23 +202,6 @@ extension MountMonitor {
         await self.scheduleReconnect(for: mountID, attempt: 0)
     }
     
-    /// Marks the server as unreachable for a connected mount and returns the mountID if the zombie timeout has been exceeded.
-    /// Returns nil if the mount is not yet ready for a force unmount.
-    private func prepareZombieUnmount(for mountID: PersistentIdentifier) async -> PersistentIdentifier? {
-        await self.stateManager.markServerUnreachable(for: mountID)
-
-        let state = await self.stateManager.getState(for: mountID)
-        guard let unreachableSince = state.serverUnreachableSince else { return nil }
-
-        let zombieTimeout = await Config.Connection.mountTimeout
-        let elapsed = Date().timeIntervalSince(unreachableSince)
-
-        guard elapsed >= zombieTimeout, !state.isForceUnmounting else { return nil }
-
-        await logger("[prepareZombieUnmount] 🧟 Mount \(self.accessor.summarize(id: mountID)) has been unreachable for \(Int(elapsed))s — queuing zombie unmount", level: .warning)
-        return mountID
-    }
-
     /// Force unmounts a zombie mount and schedules a reconnect if auto-reconnect is enabled.
     private func runZombieUnmount(for mountID: PersistentIdentifier) async {
         // Force unmount it:
@@ -250,7 +217,9 @@ extension MountMonitor {
         // Check if auto-reconnect is enabled and we're on a trusted network before scheduling a reconnect:
         guard let mountData = await self.accessor.getData(id: mountID),
               mountData.autoReconnect, await ReconnectPolicy.isEligible(path: self.currentNetworkPath) else { return }
-        await logger("[runZombieUnmount] Scheduling reconnect for mount \(self.accessor.summarize(id: mountID)) after zombie unmount. autoReconnect: \(mountData.autoReconnect)", level: .info)
+        
+        let summary = await self.accessor.summarize(id: mountID)
+        await logger("[runZombieUnmount] Scheduling reconnect for mount `\(summary)` after zombie unmount. autoReconnect: \(mountData.autoReconnect)", level: .info)
 
         await self.stateManager.resetReconnectAttempts(for: mountID)
         await self.scheduleReconnect(for: mountID, attempt: 0)

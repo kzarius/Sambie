@@ -45,6 +45,32 @@ actor MountAccessor {
             return [:]
         }
     }
+    
+    /// Iterates over all mounts and executes an async block for each one.
+    /// - Parameters:
+    ///   - concurrently: If true, the action is executed for all mounts simultaneously using a task group.
+    ///   - action: The async closure to run, providing the `mountID`.
+    func getMountIDs(
+        concurrently: Bool = true,
+        perform action: @Sendable @escaping (PersistentIdentifier) async -> Void
+    ) async {
+        // Re-use your existing getMountIDs() to fetch the dictionary, then flatten:
+        let allMountIDs = self.getMountIDs().values.flatMap { $0 }
+        
+        if concurrently {
+            await withTaskGroup(of: Void.self) { group in
+                for mountID in allMountIDs {
+                    group.addTask {
+                        await action(mountID)
+                    }
+                }
+            }
+        } else {
+            for mountID in allMountIDs {
+                await action(mountID)
+            }
+        }
+    }
 
     /// Retrieves Mount IDs for a specific host, sorted by order.
     /// - Parameter hostID: The PersistentIdentifier of the host to filter by.
