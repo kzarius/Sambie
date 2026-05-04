@@ -61,7 +61,8 @@ struct EditorForm: View {
             ) {
                 CredentialsForm(
                     formData: self.$actions.formData,
-                    password: self.$actions.password
+                    password: self.$actions.password,
+                    hasExistingPassword: self.actions.hasExistingPassword
                 )
             }
             

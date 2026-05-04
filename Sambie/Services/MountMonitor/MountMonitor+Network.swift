@@ -5,11 +5,33 @@
 //  Created by Kaeo McKeague-Clark on 11/2/2026.
 //
 
+import AppKit
 import Foundation
 import Network
 
-/// Network Monitoring Extension - Handles network connectivity changes to manage auto-reconnect mounts.
+/// Network Monitoring Extension - Handles network connectivity changes and system sleep/wake events to manage auto-reconnect mounts.
 extension MountMonitor {
+    
+    // MARK: - Wake Monitoring
+    /// Observes system wake notifications and re-arms reconnects for all disconnected mounts.
+    internal func startWakeMonitoring() {
+        self.wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task {
+                guard let self else { return }
+                await logger("☀️ System woke from sleep — triggering status cycle and reconnect pass", level: .info)
+                // Give the network a moment to come back up before checking:
+                try? await Task.sleep(for: .seconds(2))
+                await self.runStatusCycle()
+                await self.doScheduledReconnects()
+            }
+        }
+    }
+
+    // MARK: - Network Monitoring
     /// Start monitoring network connectivity.
     internal func startNetworkMonitoring() async {
         self.networkMonitor = NWPathMonitor()

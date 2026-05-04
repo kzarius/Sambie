@@ -54,7 +54,9 @@ struct MenuBar: View {
         self.openWindow(id: id)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.forEach { $0.orderFrontRegardless() }
+            NSApp.windows
+                .first { $0.identifier?.rawValue == id }?
+                .orderFrontRegardless()
         }
     }
 }

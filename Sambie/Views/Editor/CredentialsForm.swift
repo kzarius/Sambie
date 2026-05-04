@@ -13,6 +13,9 @@ struct CredentialsForm: View {
     // MARK: - Properties
     @Binding var formData: MountDataObject?
     @Binding var password: String
+    let hasExistingPassword: Bool
+
+    @FocusState private var isEditingPassword: Bool
     
     
     // MARK: - View
@@ -29,7 +32,20 @@ struct CredentialsForm: View {
                     }
                     
                     LabeledInputField(label: "Password") {
-                        SecureField("", text: self.$password)
+                        ZStack(alignment: .leading) {
+                            SecureField("", text: self.$password)
+                                .focused(self.$isEditingPassword)
+
+                            // Show bullet overlay when a password is saved and user hasn't tapped in yet:
+                            if self.hasExistingPassword && !self.isEditingPassword && self.password.isEmpty {
+                                Text(String(repeating: "●", count: 8))
+                                    .foregroundStyle(.primary)
+                                    .font(.system(size: 8))
+                                    .onTapGesture {
+                                        self.isEditingPassword = true
+                                    }
+                            }
+                        }
                     }
                     
                     LabeledInputField(label: "Host") {

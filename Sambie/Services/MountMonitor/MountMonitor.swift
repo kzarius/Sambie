@@ -11,6 +11,7 @@
 //  Created by Kaeo McKeague-Clark on 10/10/25.
 //
 
+import AppKit
 import Network
 import SwiftData
 import SwiftUI
@@ -30,6 +31,9 @@ actor MountMonitor {
     internal var networkMonitor: NWPathMonitor?
     internal var isNetworkAvailable = true
     internal var currentNetworkPath: NWPath? = nil
+
+    // Sleep/wake monitoring:
+    internal var wakeObserver: NSObjectProtocol?
     
     
     // MARK: - Initializer
@@ -47,6 +51,9 @@ actor MountMonitor {
         
         // Fire an immediate reconnect pass in the background without blocking init:
         Task { await self.doScheduledReconnects() }
+
+        // Observe system wake to re-arm reconnects after sleep:
+        self.startWakeMonitoring()
     }
     
     deinit {
@@ -65,7 +72,6 @@ actor MountMonitor {
                 do {
                     try await Task.sleep(for: .seconds(self.checkInterval))
                 } catch {
-                    // Exit on cancellation:
                     break
                 }
                 guard !Task.isCancelled else { break }
@@ -75,8 +81,14 @@ actor MountMonitor {
         }
     }
     
-    /// Stops the monitoring loop./
-    func stopMonitoring() { self.monitoringTask?.cancel() }
+    /// Stops the monitoring loop and cleans up all observers.
+    func stopMonitoring() {
+        self.monitoringTask?.cancel()
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
+    }
     
     /// Stops the monitoring loop.
     func cleanupMount(id mountID: PersistentIdentifier) async {

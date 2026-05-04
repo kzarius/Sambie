@@ -21,6 +21,7 @@ final class EditorActions {
     var password: String = ""
     var validationErrors: [Error] = []
     var sambaURL: String = ""
+    var hasExistingPassword: Bool = false
     
     // Private:
     private let accessor: MountAccessor
@@ -108,6 +109,12 @@ final class EditorActions {
         actions.mount = existingMount
         actions.formData = await existingMount.toDataObject()
         actions.sambaURL = SambaURL.create(from: actions.formData!).absoluteString
+        
+        // Check if a password is already saved in keychain:
+        if let savedPassword = await SambaMount.retrievePassword(for: actions.formData!), !savedPassword.isEmpty {
+            actions.hasExistingPassword = true
+            // Leave password empty — the overlay will indicate a saved password exists.
+        }
         
         return actions
     }
@@ -220,12 +227,14 @@ final class EditorActions {
     private func savePasswordToKeychain(password: String) throws {
         guard let formData = self.formData else { return }
         
-        let serverURL = "smb://\(formData.pendingHostname)"
-        let keychain = Keychain(
-            server: serverURL,
-            protocolType: .smb
-        )
+        // Skip saving if the password is empty (user didn't change it):
+        guard !password.isEmpty else {
+            logger("Skipping keychain update — password unchanged", level: .debug)
+            return
+        }
         
+        let serverURL = "smb://\(formData.pendingHostname)"
+        let keychain = Keychain(server: serverURL, protocolType: .smb)
         try keychain.set(password, key: formData.user)
         logger("Saved password to system Keychain for \(formData.user)@\(formData.pendingHostname)", level: .debug)
     }
